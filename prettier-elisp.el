@@ -41,6 +41,22 @@
   :prefix "prettier-elisp"
   :link '(url-link :tag "Repository" "https://github.com/KarimAziev/prettier-elisp"))
 
+(defcustom prettier-elisp-newline-symbols '("defcustom"
+                                            "defgroup"
+                                            "defvar"
+                                            "defun"
+                                            "cl-defun"
+                                            "defmacro"
+                                            "defconst"
+                                            "defface"
+                                            "provide"
+                                            "define-minor-mode")
+  "List of forms to divide with newline."
+  :group 'prettier-elisp
+  :type '(repeat (string  :tag "Name")))
+
+(defvar-local prettier-elisp-newline-symbols-re nil)
+
 (defun prettier-elisp-join-parens ()
   "Join newlines with parens in current buffer."
   (interactive)
@@ -72,6 +88,21 @@
       (while (prettier-elisp-re-search-forward "[a-zZ-A0-9]\\((\\)" nil t 1)
         (replace-match "\s(" nil nil nil 1)))))
 
+(defun prettier-elisp-ensure-newlines ()
+  (save-excursion
+    (goto-char (point-min))
+    (when (and (null prettier-elisp-newline-symbols-re)
+               (<= 1 (length prettier-elisp-newline-symbols)))
+      (setq prettier-elisp-newline-symbols-re
+            (concat ")\n\\s-*("
+                    (regexp-opt
+                     prettier-elisp-newline-symbols
+                     t) "[\s\t\n]")))
+    (while (prettier-elisp-re-search-forward
+            prettier-elisp-newline-symbols-re nil t 1)
+      (re-search-backward ")\n" nil t 1)
+      (replace-match ")\n\n"))))
+
 (defun prettier-elisp ()
   "Format current defun at point."
   (interactive)
@@ -80,7 +111,8 @@
       (narrow-to-defun)
       (prettier-elisp-join-parens)
       (indent-buffer)
-      (prettier-elisp-ensure-parens-indent))))
+      (prettier-elisp-ensure-parens-indent)
+      (prettier-elisp-ensure-newlines))))
 
 (defun prettier-elisp-format-buffer ()
   "Format current defun at point."
@@ -90,7 +122,8 @@
       (widen)
       (goto-char (point-min))
       (prettier-elisp-join-parens)
-      (prettier-elisp-ensure-parens-indent))))
+      (prettier-elisp-ensure-parens-indent)
+      (prettier-elisp-ensure-newlines))))
 
 (defun prettier-elisp-re-search-forward-inner (regexp &optional bound count)
   "Helper function for `prettier-elisp-re-search-forward'."
