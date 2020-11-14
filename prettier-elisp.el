@@ -30,6 +30,7 @@
 ;; This file is not part of GNU Emacs.
 
 ;;; Commentary:
+
 ;; Formats your elisp code using on file save.
 
 ;;; Code:
@@ -43,42 +44,33 @@
 (defun prettier-elisp-join-parens ()
   "Join newlines with parens in current buffer."
   (interactive)
-  (with-current-buffer (buffer-name)
+  (when (which-function)
     (save-restriction
+      (narrow-to-defun)
       (save-excursion
         (goto-char (point-min))
-        (while
-            (or (looking-at ";;+.+\n+")
-                (looking-back ";;+.+\n+"))
-          (forward-line))
-        (beginning-of-defun)
-        (narrow-to-defun)
-        (while (re-search-forward "^\\s-*[)\n]" nil t 1)
-          (if (or (nth 3 (syntax-ppss))
-                  (nth 4 (syntax-ppss)))
-              (forward-line)
-            (join-line)))))))
-
-(defun prettier-elisp-join-empty-lines ()
-  "Join multy whitespaces between parens."
-  (interactive)
-  (save-restriction
-    (save-excursion
-      (goto-char (point-min))
-      (when (looking-at ";;+")
-        (forward-list 1)
-        (backward-char 1))
-      (while (or (re-search-forward ")\n+\n\n+" nil t 1))
-        (while (not (looking-back ")\n\n"))
-          (join-line))
-        (forward-list)))))
+        (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
+          (unless (or (nth 3 (syntax-ppss))
+                      (nth 4 (syntax-ppss)))
+            (replace-match "")))
+        (goto-char (point-min))
+        (while (prettier-elisp-re-search-forward
+                "(\\([\n\t\s]+\\)[a-zZ-A0-9]" nil t 1)
+          (replace-match "" nil nil nil 1))
+        (goto-char (point-min))
+        (while (prettier-elisp-re-search-forward
+                "[a-zZ-A0-9)]\\([\n\t\s]+\\))" nil t 1)
+          (unless (or (nth 3 (syntax-ppss))
+                      (nth 4 (syntax-ppss)))
+            (replace-match "" nil nil nil 1)))))))
 
 (defun prettier-elisp-ensure-parens-indent ()
-  (when-let ((func (which-function)))
-    (beginning-of-defun)
-    (re-search-forward func nil t 1)
-    (when (looking-at-p "(")
-      (insert "\s"))))
+  (save-restriction
+    (widen)
+    (save-excursion
+      (goto-char (point-min))
+      (while (prettier-elisp-re-search-forward "[a-zZ-A0-9]\\((\\)" nil t 1)
+        (replace-match "\s(" nil nil nil 1)))))
 
 (defun prettier-elisp ()
   "Format current defun at point."
@@ -89,6 +81,74 @@
       (prettier-elisp-join-parens)
       (indent-buffer)
       (prettier-elisp-ensure-parens-indent))))
+
+(defun prettier-elisp-format-buffer ()
+  "Format current defun at point."
+  (interactive)
+  (save-excursion
+    (save-restriction
+      (widen)
+      (goto-char (point-min))
+      (prettier-elisp-join-parens)
+      (prettier-elisp-ensure-parens-indent))))
+
+(defun prettier-elisp-re-search-forward-inner (regexp &optional bound count)
+  "Helper function for `prettier-elisp-re-search-forward'."
+  (let ((parse))
+    (while (> count 0)
+      (with-syntax-table emacs-lisp-mode-syntax-table
+        (re-search-forward regexp bound)
+        (setq parse (syntax-ppss))
+        (cond ((and (nth 3 parse)
+                    (nth 8 parse))
+               (goto-char (nth 8 parse))
+               (forward-sexp))
+              ((and (nth 4 parse)
+                    (nth 8 parse))
+               ;;(setq count (1+ count))
+               (goto-char (nth 8 parse))
+               (forward-line))
+              (t
+               (setq count (1- count)))))))
+  (point))
+
+(defun prettier-elisp-re-search-forward (regexp &optional bound noerror count)
+  "Search forward from point for REGEXP ignoring comments and strings."
+  (unless count (setq count 1))
+  (let ((init-point (point))
+        (search-fun
+         (cond ((< count 0) (setq count (- count))
+                #'prettier-elisp-re-search-backward-inner)
+               ((> count 0) #'prettier-elisp-re-search-forward-inner)
+               (t #'ignore))))
+    (condition-case err
+        (funcall search-fun regexp bound count)
+      (search-failed
+       (goto-char init-point)
+       (unless noerror
+         (signal (car err) (cdr err)))))))
+
+(defun prettier-elisp-re-search-backward-inner (regexp &optional bound count)
+  "Helper for `km--elisp--re-search-backward'."
+  (let ((parse))
+    (while (> count 0)
+      (with-syntax-table emacs-lisp-mode-syntax-table
+        (re-search-backward regexp bound)
+        (setq parse (syntax-ppss))
+        (cond ((and (or (nth 3 parse))
+                    (nth 8 parse))
+               (goto-char (nth 8 parse)))
+              ((and (nth 4 parse)
+                    (nth 8 parse))
+               (goto-char (nth 8 parse)))
+              (t
+               (setq count (1- count)))))))
+  (point))
+
+(defun prettier-elisp-re-search-backward (regexp &optional bound noerror count)
+  "Search backward from point for REGEXP ignoring strings and comments."
+  (prettier-elisp-re-search-forward
+   regexp bound noerror (if count (- count) -1)))
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-mode
