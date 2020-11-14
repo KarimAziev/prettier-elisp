@@ -7,14 +7,10 @@
    Download repo or install the package with use-package and straight.
 
    #+BEGIN_SRC elisp
-     (use-package prettier-elisp
-       :straight (prettier-elisp
-                  :type git
-                  :host github
-                  :repo "KarimAziev/prettier-elisp")
-       :commands (prettier-elisp-mode
-                  prettier-elisp
-                  prettier-elisp-join-empty-lines)
-       :hook ((emacs-lisp-mode . prettier-elisp-mode)
-              (lisp-interaction-mode . prettier-elisp-mode)))
+(use-package prettier-elisp
+  :straight (prettier-elisp
+             :type git
+             :host github
+             :repo "KarimAziev/prettier-elisp")
+  :hook ((emacs-lisp-mode . prettier-elisp-mode)))
    #+END_SRC
