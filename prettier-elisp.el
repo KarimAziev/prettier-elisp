@@ -188,9 +188,10 @@
     (save-restriction
       (widen)
       (goto-char (point-min))
-      (prettier-elisp-join-parens)
-      (prettier-elisp-ensure-parens-indent)
-      (prettier-elisp-ensure-newlines))))
+      (save-match-data
+        (prettier-elisp-join-parens)
+        (prettier-elisp-ensure-parens-indent)
+        (prettier-elisp-ensure-newlines)))))
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-mode
