@@ -138,7 +138,8 @@
     (save-match-data
       (while (prettier-elisp-re-search-forward
               prettier-elisp-newline-symbols-re nil t 1)
-        (replace-match "" nil nil nil 2)))
+        (when (= 1 (nth 0 (syntax-ppss (point))))
+          (replace-match "" nil nil nil 2))))
     (goto-char (point-min))
     (save-match-data
       (while (prettier-elisp-re-search-forward ")\n\n\\(\n+\\)" nil t 1)
