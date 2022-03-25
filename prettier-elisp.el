@@ -175,7 +175,9 @@
   (save-excursion
     (save-restriction
       (save-match-data
-        (when (which-function)
+        (when (and
+               (< 0 (car (syntax-ppss (point))))
+               (which-function))
           (narrow-to-defun)
           (save-match-data
             (prettier-elisp-join-parens))
