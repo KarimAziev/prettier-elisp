@@ -57,8 +57,6 @@
   :group 'prettier-elisp
   :type '(repeat (symbol  :tag "Name")))
 
-(defvar prettier-elisp-newline-symbols-re nil)
-
 (defun prettier-elisp-re-search-forward-inner (regexp &optional bound count)
   "Helper function for `prettier-elisp-re-search-forward'."
   (let ((parse))
@@ -126,6 +124,9 @@
           (replace-match "\s(" nil nil nil 1))))))
 
 (defun prettier-elisp-backward-list (&optional arg)
+  "Move backward across one balanced group of parentheses.
+Return new position or nil.
+With ARG, do it that many times."
   (let ((pos (point))
         (end))
     (setq end (ignore-errors
@@ -165,6 +166,7 @@
 
 ;;;###autoload
 (defun prettier-elisp-ensure-newlines ()
+  "Add new line after every top form from variable `prettier-elisp-newline-symbols'."
   (interactive)
   (save-excursion
     (save-restriction
