@@ -231,13 +231,11 @@ With ARG, do it that many times."
       (save-match-data
         (while (prettier-elisp-forward-list)
           (let ((sexp-start (save-excursion (prettier-elisp-backward-list)
-                                            (point)))
-                (rep))
+                                            (point))))
             (when (and
                    (< sexp-start (line-beginning-position))
                    (looking-at "\\(\\([\s\t]+\\)?[\n]\\)\\([;(]\\)"))
-              (let ((pos (point))
-                    (end))
+              (let ((pos (point)))
                 (delete-region pos (point))
                 (insert "\n")))))))))
 
@@ -260,7 +258,7 @@ With ARG, do it that many times."
         (while (and (prettier-elisp-backward-list)
                     (looking-at "[(]"))
           (prettier-elisp-current)))))
-  (save-match-data (km-elisp-prettier-newlines)))
+  (save-match-data (prettier-elisp-ensure-newlines)))
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-mode
