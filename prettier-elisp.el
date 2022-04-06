@@ -35,25 +35,36 @@
 
 ;;; Code:
 
+(require 'thingatpt)
+
 (defgroup prettier-elisp nil
   "Minor mode to format Elisp code on file save."
   :group 'languages
   :prefix "prettier-elisp"
   :link '(url-link :tag "Repository" "https://github.com/KarimAziev/prettier-elisp"))
 
-(defcustom prettier-elisp-newline-symbols '(defun
-                                               use-package
-                                               straight-use-package
-                                             eval-after-load
-                                             with-eval-after-load
-                                             define-minor-mode
-                                             define-derived-mode
-                                             cl-defun
-                                             defcustom
-                                             defface
-                                             defhydra
-                                             defmacro)
+(defcustom prettier-elisp-newline-symbols '("defcustom"
+                                            "defgroup"
+                                            "defvar"
+                                            "defun"
+                                            "cl-defun"
+                                            "defmacro"
+                                            "defconst"
+                                            "defface"
+                                            "defhydra"
+                                            "define-widget"
+                                            "define-global-minor-mode"
+                                            "define-derived-mode"
+                                            "use-package"
+                                            "define-minor-mode")
   "List of forms to divide with newline."
+  :group 'prettier-elisp
+  :type '(repeat (string  :tag "Name")))
+
+(defcustom prettier-elisp-non-newline-symbols '(require
+                                                declare-function
+                                                defvar)
+  "List of forms not to divide with newline."
   :group 'prettier-elisp
   :type '(repeat (symbol  :tag "Name")))
 
@@ -114,15 +125,6 @@
   (prettier-elisp-re-search-forward
    regexp bound noerror (if count (- count) -1)))
 
-(defun prettier-elisp-ensure-parens-indent ()
-  (save-restriction
-    (widen)
-    (save-excursion
-      (goto-char (point-min))
-      (save-match-data
-        (while (prettier-elisp-re-search-forward "[a-zZ-A0-9]\\((\\)" nil t 1)
-          (replace-match "\s(" nil nil nil 1))))))
-
 (defun prettier-elisp-backward-list (&optional arg)
   "Move backward across one balanced group of parentheses.
 Return new position or nil.
@@ -135,87 +137,116 @@ With ARG, do it that many times."
     (unless (equal pos end)
       end)))
 
+(defun prettier-elisp-forward-list (&optional arg)
+  "Move forward across one balanced group of parentheses.
+Return new position or nil.
+With ARG, do it that many times."
+  (let ((pos (point))
+        (end))
+    (setq end (ignore-errors
+                (forward-list (or arg 1))
+                (point)))
+    (unless (equal pos end)
+      end)))
+
 ;;;###autoload
-(defun prettier-elisp-join-parens ()
-  "Join newlines with parens in current function."
+(defun prettier-elisp-current ()
+  "Prettify current top form."
   (interactive)
-  (when (which-function)
-    (save-excursion
-      (save-restriction
-        (narrow-to-defun)
-        (goto-char (point-min))
-        (save-match-data
-          (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
-            (delete-region (match-beginning 0) (point))))
-        (goto-char (point-min))
-        (save-match-data
-          (while (prettier-elisp-re-search-forward
-                  "(\\([\n\t\s]+\\)[a-zZ-A0-9]" nil t 1)
-            (replace-match "" nil nil nil 1)))
-        (goto-char (point-min))
-        (save-match-data
-          (while (prettier-elisp-re-search-forward
-                  "[a-zZ-A0-9)]\\([\n\t\s]+\\))" nil t 1)
-            (when-let ((end (1- (point)))
-                       (start (save-excursion
-                                (forward-char -1)
-                                (skip-chars-backward "\s\t\n")
-                                (unless (nth 4 (syntax-ppss (point)))
-                                  (point)))))
-              (delete-region start end))))))))
+  (save-excursion
+    (let ((pps (syntax-ppss)))
+      (when-let ((bounds (progn
+                           (if (if (> (car pps) 0)
+                                   (progn
+                                     (goto-char (car (nth 9 pps)))
+                                     t)
+                                 (looking-at "[(]"))
+                               (let ((col (current-column)))
+                                 (when (> col 0)
+                                   (let ((pos (point)))
+                                     (skip-chars-backward "\s\t")
+                                     (delete-region (point) pos)
+                                     (when (> (current-column) 0)
+                                       (insert "\n")
+                                       (skip-chars-forward "\n"))))
+                                 (indent-sexp)
+                                 (bounds-of-thing-at-point 'list))))))
+        (let ((max (cdr bounds)))
+          (save-excursion
+            (save-match-data
+              (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" max t 1)
+                (delete-region (match-beginning 0) (point)))))
+          (save-excursion
+            (save-match-data
+              (while (prettier-elisp-re-search-forward
+                      "(\\([\n\t\s]+\\)[a-zZ-A0-9]" max t 1)
+                (replace-match "" nil nil nil 1))))
+          (save-excursion
+            (save-match-data
+              (while (prettier-elisp-re-search-forward
+                      "[a-zZ-A0-9)]\\([\n\t\s]+\\))" max t 1)
+                (when-let ((end (1- (point)))
+                           (start (save-excursion
+                                    (forward-char -1)
+                                    (skip-chars-backward "\s\t\n")
+                                    (unless (nth 4 (syntax-ppss (point)))
+                                      (point)))))
+                  (delete-region start end)))))
+          (save-excursion
+            (save-match-data
+              (while (prettier-elisp-re-search-forward
+                      "[a-zZ-A0-9]\\((\\)" max t 1)
+                (replace-match "\s(" nil nil nil 1))))
+          (when-let ((sexp (list-at-point)))
+            (save-match-data
+              (cond ((looking-back ";;;###autoload[\s\t\n][\s\t\n]+" 0)
+                     (replace-match ";;;###autoload\n"))))))))))
+
+(defvar prettier-elisp-newline-symbols-re nil)
 
 ;;;###autoload
 (defun prettier-elisp-ensure-newlines ()
   "Add new line after every top form from variable `prettier-elisp-newline-symbols'."
   (interactive)
   (save-excursion
-    (save-restriction
-      (widen)
-      (goto-char (point-max))
-      (while (and (prettier-elisp-backward-list)
-                  (looking-at "[(]"))
-        (when
-            (save-excursion
-              (when (prettier-elisp-backward-list)
-                (when-let ((s (sexp-at-point)))
-                  (when (listp s)
-                    (let ((res (memq (car s) prettier-elisp-newline-symbols)))
-                      res)))))
-          (save-excursion
-            (let ((start (point)))
-              (when-let ((prev-form-end
-                          (when (prettier-elisp-re-search-backward
-                                 "[)]" nil t 1)
-                            (forward-line 1))))
-                (if-let ((newline-start (when (> start (point))
-                                          (prettier-elisp-re-search-forward
-                                           "^\n" start t 1))))
-                    (while (prettier-elisp-re-search-forward "^\n" start t)
-                      (replace-match ""))
-                  (insert "\n"))))))))))
+    (goto-char (point-min))
+    (when (and (null prettier-elisp-newline-symbols-re)
+               (<= 1 (length prettier-elisp-newline-symbols)))
+      (setq prettier-elisp-newline-symbols-re
+            (concat "\\(" "\\(^\\s-+\\)[(]" (regexp-opt
+                                             prettier-elisp-newline-symbols
+                                             t) "\\)")))
+    (when prettier-elisp-newline-symbols-re
+      (save-match-data
+        (while (prettier-elisp-re-search-forward
+                prettier-elisp-newline-symbols-re nil t 1)
+          (when (= 1 (nth 0 (syntax-ppss (point))))
+            (replace-match "" nil nil nil 2)))))
+    (goto-char (point-min))
+    (save-match-data
+      (while (prettier-elisp-re-search-forward ")\n\n\\(\n+\\)" nil t 1)
+        (replace-match "" nil nil nil 1)))
+    (when prettier-elisp-newline-symbols
+      (goto-char (point-min))
+      (save-match-data
+        (while (prettier-elisp-forward-list)
+          (let ((sexp-start (save-excursion (prettier-elisp-backward-list)
+                                            (point)))
+                (rep))
+            (when (and
+                   (< sexp-start (line-beginning-position))
+                   (looking-at "\\(\\([\s\t]+\\)?[\n]\\)\\([;(]\\)"))
+              (let ((pos (point))
+                    (end))
+                (delete-region pos (point))
+                (insert "\n")))))))))
 
 ;;;###autoload
 (defun prettier-elisp ()
   "Format current defun at point and multy lines in buffer."
   (interactive)
-  (save-excursion
-    (save-restriction
-      (save-match-data
-        (when (and
-               (or
-                (< 0 (car (syntax-ppss (point))))
-                (list-at-point)))
-          (narrow-to-defun)
-          (save-match-data
-            (prettier-elisp-join-parens))
-          (goto-char (point-min))
-          (prettier-elisp-re-search-forward "[(]" nil t 1)
-          (forward-char -1)
-          (indent-sexp)
-          (widen)
-          (save-match-data
-            (prettier-elisp-ensure-parens-indent))
-          (save-match-data (prettier-elisp-ensure-newlines)))))))
+  (save-match-data (prettier-elisp-current))
+  (save-match-data (prettier-elisp-ensure-newlines)))
 
 ;;;###autoload
 (defun prettier-elisp-format-buffer ()
@@ -224,10 +255,12 @@ With ARG, do it that many times."
   (save-excursion
     (save-restriction
       (widen)
-      (goto-char (point-min))
-      (save-match-data (prettier-elisp-join-parens))
-      (save-match-data (prettier-elisp-ensure-parens-indent))
-      (save-match-data (prettier-elisp-ensure-newlines)))))
+      (goto-char (point-max))
+      (save-match-data
+        (while (and (prettier-elisp-backward-list)
+                    (looking-at "[(]"))
+          (prettier-elisp-current)))))
+  (save-match-data (km-elisp-prettier-newlines)))
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-mode
