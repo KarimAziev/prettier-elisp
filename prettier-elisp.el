@@ -69,7 +69,8 @@
   :type '(repeat (symbol  :tag "Name")))
 
 (defun prettier-elisp-re-search-forward-inner (regexp &optional bound count)
-  "Helper function for `prettier-elisp-re-search-forward'."
+  "Helper function for `prettier-elisp-re-search-forward'.
+Arguments REGEXP, BOUND, COUNT has the same meaning as for `re-search-forward'."
   (let ((parse))
     (while (> count 0)
       (with-syntax-table emacs-lisp-mode-syntax-table
@@ -88,7 +89,8 @@
   (point))
 
 (defun prettier-elisp-re-search-forward (regexp &optional bound noerror count)
-  "Search forward from point for REGEXP ignoring comments and strings."
+  "Search forward from point for REGEXP ignoring comments and strings.
+Arguments BOUND, NOERROR, COUNT has the same meaning as for `re-search-forward'."
   (unless count (setq count 1))
   (let ((init-point (point))
         (search-fun
@@ -104,7 +106,9 @@
          (signal (car err) (cdr err)))))))
 
 (defun prettier-elisp-re-search-backward-inner (regexp &optional bound count)
-  "Helper for `km--elisp--re-search-backward'."
+  "Helper for `km--elisp--re-search-backward'.
+Arguments REGEXP, BOUND, COUNT has the same meaning
+as for `re-search-backward'."
   (let ((parse))
     (while (> count 0)
       (with-syntax-table emacs-lisp-mode-syntax-table
@@ -121,7 +125,9 @@
   (point))
 
 (defun prettier-elisp-re-search-backward (regexp &optional bound noerror count)
-  "Search backward from point for REGEXP ignoring strings and comments."
+  "Search backward from point for REGEXP ignoring strings and comments.
+Arguments REGEXP, BOUND, NOERROR, COUNT has the same meaning
+as for `re-search-backward'."
   (prettier-elisp-re-search-forward
    regexp bound noerror (if count (- count) -1)))
 
@@ -206,7 +212,7 @@ With ARG, do it that many times."
 
 ;;;###autoload
 (defun prettier-elisp-ensure-newlines ()
-  "Add new line after every top form from variable `prettier-elisp-newline-symbols'."
+  "Add new line after every top form defined in `prettier-elisp-newline-symbols'."
   (interactive)
   (save-excursion
     (goto-char (point-min))
@@ -238,6 +244,16 @@ With ARG, do it that many times."
               (let ((pos (point)))
                 (delete-region pos (point))
                 (insert "\n")))))))))
+
+;;;###autoload
+(defun prettier-elisp-string (str)
+  "Format STR and return result."
+  (with-temp-buffer
+    (insert str)
+    (delay-mode-hooks
+      (emacs-lisp-mode)
+      (prettier-elisp-format-buffer))
+    (buffer-string)))
 
 ;;;###autoload
 (defun prettier-elisp ()
