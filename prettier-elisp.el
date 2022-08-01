@@ -106,7 +106,7 @@ Arguments BOUND, NOERROR, COUNT has the same meaning as for `re-search-forward'.
          (signal (car err) (cdr err)))))))
 
 (defun prettier-elisp-re-search-backward-inner (regexp &optional bound count)
-  "Helper for `km--elisp--re-search-backward'.
+  "Helper for `prettier-elisp-re-search-backward'.
 Arguments REGEXP, BOUND, COUNT has the same meaning
 as for `re-search-backward'."
   (let ((parse))
