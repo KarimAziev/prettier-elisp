@@ -68,10 +68,12 @@
 Arguments REGEXP, BOUND, COUNT has the same meaning as for `re-search-forward'."
   (let ((parse))
     (while (> count 0)
-      (with-syntax-table emacs-lisp-mode-syntax-table
+      (with-syntax-table
+          emacs-lisp-mode-syntax-table
         (re-search-forward regexp bound)
         (setq parse
-              (syntax-ppss))
+              (save-excursion
+                (syntax-ppss (match-beginning 0))))
         (cond ((and (nth 3 parse)
                     (nth 8 parse))
                (goto-char (nth 8 parse))
@@ -250,28 +252,30 @@ With ARG, do it that many times."
                  (- (point)
                     beg)))))))
     (when (and len fill-column
+               col
                (> (+ len col)
                   fill-column))
-      (prettier-elisp-delete-whitespace-forward)
+      (prettier-elisp-delete-multi-whitespace-forward)
       (if-let ((l (prettier-elisp-get-list-at-point)))
           (cond ((and
-                  (or (symbolp (car l))
-                      (stringp (car l)))
+                  (or (symbolp (car-safe l))
+                      (stringp (car-safe l)))
+                  (listp (cdr-safe l))
                   (=
                    (length
                     (seq-filter
                      (lambda (it)
                        (if (stringp it)
-                           (not (string-match-p "[\n\r\f]" it))
+                           (not
+                            (string-match-p
+                             "[\n\r\f]" it))
                          (symbolp it)))
                      l))
                    (length l)))
                  (let ((bounds
                         (bounds-of-thing-at-point 'sexp)))
-                   (insert "\s")
                    (fill-region-as-paragraph (car bounds)
-                                             (cdr bounds))))
-                (t (prettier-elisp-new-line-and-indent)))
+                                             (cdr bounds)))))
         (prettier-elisp-new-line-and-indent)))))
 
 (defun prettier-elisp-ensure-list-lines ()
@@ -350,8 +354,7 @@ With ARG, do it that many times."
                        (keywordp (symbol-at-point)))))
                   (prettier-elisp-backward-sexp 1)
                   (prettier-elisp-new-line-and-indent)
-                  (prettier-elisp-forward-sexp 1))))
-          (_ (prettier-elisp-indent-by-fill-column))))))
+                  (prettier-elisp-forward-sexp 1))))))))
 
 (defun prettier-elisp-indent-inner ()
   "Indent nested list at point."
@@ -367,11 +370,8 @@ With ARG, do it that many times."
       (when (prettier-elisp-move-with 'down-list 1)
         (prettier-elisp-delete-whitespace-forward)
         (pcase type
-          ((or 'defun 'cl-defun 'defhydra
-               'defclass
-               'cl-defclass
-               'defmacro
-               'cl-defmethod)
+          ((or 'defun 'cl-defun 'defhydra 'defclass 'cl-defclass
+               'defmacro 'cl-defmethod)
            (prettier-elisp-forward-sexp 1)
            (prettier-elisp-indent-by-fill-column)
            (prettier-elisp-forward-sexp 1)
@@ -389,10 +389,7 @@ With ARG, do it that many times."
              (prettier-elisp-new-line-and-indent)
              (prettier-elisp-forward-sexp 1))
            (newline-and-indent))
-          ((or 'defvar
-               'defvar-local
-               'defcustom
-               'defconst)
+          ((or 'defvar 'defvar-local 'defcustom 'defconst)
            (prettier-elisp-forward-sexp 1)
            (prettier-elisp-delete-multi-whitespace-forward)
            (prettier-elisp-forward-sexp 1)
@@ -460,9 +457,7 @@ With ARG, do it that many times."
                                  (point))))))
           (save-excursion
             (save-match-data
-              (while
-                  (prettier-elisp-re-search-forward "^\\s-*[\n]+"
-                                                    nil t 1)
+              (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
                 (let ((beg (match-beginning 0)))
                   (delete-region beg (point))))))
           (save-excursion
