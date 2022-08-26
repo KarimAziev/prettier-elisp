@@ -290,10 +290,10 @@ With ARG, do it that many times."
       (when (save-excursion
               (when (prettier-elisp-re-search-forward "[^\s\t]" nil t 1)
                 (forward-char -1)
-                (not (looking-at "[)\n\r\f]"))))
+                (looking-at "[(]")))
         (prettier-elisp-new-line-and-indent)))
     (when (and (save-excursion
-                 (prettier-elisp-backward-sexp 3))
+                 (prettier-elisp-backward-sexp 2))
                (> (current-column)
                   fill-column))
       (prettier-elisp-backward-sexp 1)
@@ -341,7 +341,7 @@ With ARG, do it that many times."
                    (save-excursion
                      (prettier-elisp-backward-up-list 1)
                      (memq (car (prettier-elisp-get-list-at-point))
-                           '(defcustom defgroup use-package)))
+                           '(defcustom defgroup use-package! use-package)))
                    (save-excursion
                      (when (prettier-elisp-forward-sexp 1)
                        (prettier-elisp-backward-sexp 1)
@@ -375,6 +375,8 @@ With ARG, do it that many times."
            (prettier-elisp-forward-sexp 1)
            (prettier-elisp-indent-by-fill-column)
            (prettier-elisp-forward-sexp 1)
+           (prettier-elisp-delete-whitespace-forward)
+           (insert "\s")
            (prettier-elisp-indent-by-fill-column)
            (prettier-elisp-forward-sexp 1)
            (when (and fill-column
@@ -389,7 +391,7 @@ With ARG, do it that many times."
              (prettier-elisp-new-line-and-indent)
              (prettier-elisp-forward-sexp 1))
            (prettier-elisp-new-line-and-indent))
-          ((or 'defvar 'defvar-local 'defcustom 'defconst)
+          ((or 'defgroup 'defcustom)
            (prettier-elisp-forward-sexp 1)
            (prettier-elisp-delete-multi-whitespace-forward)
            (prettier-elisp-forward-sexp 1)
