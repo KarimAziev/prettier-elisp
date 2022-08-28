@@ -238,6 +238,9 @@ With ARG, do it that many times."
 (defun prettier-elisp-new-line-and-indent ()
   "Insert a newline if none and indent."
   (unless (looking-back "\\(\\([\n]\\)[\s\t]*\\)?[\n][\s\t]?+" 0)
+    (when (looking-back "[`',][\s\t]?+" 0)
+      (skip-chars-backward "[\s\t]")
+      (forward-char -1))
     (newline-and-indent)))
 
 (defun prettier-elisp-indent-by-fill-column ()
