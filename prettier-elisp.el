@@ -461,6 +461,12 @@ With ARG, do it that many times."
                                  (point))))))
           (save-excursion
             (save-match-data
+              (while (prettier-elisp-re-search-forward "[)][\n][\s]?+[)]" nil t
+                                                       1)
+                (forward-char -1)
+                (join-line))))
+          (save-excursion
+            (save-match-data
               (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
                 (let ((beg (match-beginning 0)))
                   (delete-region beg (point))))))
