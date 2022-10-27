@@ -1,10 +1,8 @@
-;;; prettier-elisp.el --- Minor mode to format emacs lisp code  -*- lexical-binding: t -*-
+;;; prettier-elisp.el --- Minor mode to format emacs lisp code -*- lexical-binding: t -*-
 
-;; Version: 0.1.0
+;; Copyright (C) Karim Aziiev <karim.aziiev@gmail.com>
 
-;; Copyright (C) 2020 Karim Aziiev <karim.aziev@gmail.com>
-
-;; Author: Karim Aziiev <karim.aziev@gmail.com>
+;; Author: Karim Aziiev <karim.aziiev@gmail.com>
 ;; URL: https://github.com/KarimAziev/prettier-elisp
 ;; Keywords: convenience edit elisp
 ;; Version: 0.1.1
@@ -55,9 +53,7 @@
   :type '(repeat (string
                   :tag "Name")))
 
-(defcustom prettier-elisp-non-newline-symbols '(require
-                                                declare-function
-                                                defvar)
+(defcustom prettier-elisp-non-newline-symbols '(require declare-function defvar)
   "List of forms not to divide with newline."
   :group 'prettier-elisp
   :type '(repeat (symbol
@@ -81,6 +77,11 @@ Arguments REGEXP, BOUND, COUNT has the same meaning as for `re-search-forward'."
               ((and (nth 4 parse)
                     (nth 8 parse))
                (goto-char (nth 8 parse))
+               (forward-line))
+              ((and
+                (not (nth 3 parse))
+                (not (nth 4 parse))
+                (looking-at ";"))
                (forward-line))
               (t
                (setq count
@@ -197,9 +198,15 @@ With ARG, do it that many times."
 
 (defun prettier-elisp-get-list-at-point ()
   "Return list at point or nil."
-  (let ((l (when (looking-at "['`]?[(]" )
-             (sexp-at-point))))
-    (when (listp l)
+  (let* ((parse (syntax-ppss (point)))
+         (l
+          (when (and
+                 (not (or (nth 3 parse)
+                          (nth 4 parse)))
+                 (looking-at "['`]?[(\\[]" ))
+            (sexp-at-point))))
+    (when (or (listp l)
+              (vectorp l))
       (or l '()))))
 
 (defun prettier-elisp-bounds-of-list-at-point ()
@@ -283,7 +290,7 @@ With ARG, do it that many times."
 (defun prettier-elisp-ensure-list-lines ()
   "Ensure thet every list is on own line."
   (while (prettier-elisp-forward-sexp 1)
-    (when (looking-back "[)]" 0)
+    (when (looking-back "[)\\]]" 0)
       (save-excursion
         (prettier-elisp-backward-sexp 1)
         (when (prettier-elisp-move-with 'down-list 1)
@@ -292,7 +299,7 @@ With ARG, do it that many times."
       (when (save-excursion
               (when (prettier-elisp-re-search-forward "[^\s\t]" nil t 1)
                 (forward-char -1)
-                (looking-at "[(]")))
+                (looking-at "[\\[(]")))
         (prettier-elisp-new-line-and-indent)))
     (when (and (save-excursion
                  (prettier-elisp-backward-sexp 2))
@@ -342,8 +349,12 @@ With ARG, do it that many times."
                ((or
                  (save-excursion
                    (prettier-elisp-backward-up-list 1)
-                   (memq (car (prettier-elisp-get-list-at-point))
-                         '(defcustom defgroup use-package! use-package)))
+                   (memq (car-safe (prettier-elisp-get-list-at-point))
+                         '(defcustom defgroup use-package! use-package
+                            transient-define-argument
+                            transient-define-prefix
+                            transient-define-suffix
+                            transient-define-infix)))
                  (save-excursion
                    (when (prettier-elisp-forward-sexp 1)
                      (prettier-elisp-backward-sexp 1)
@@ -373,7 +384,11 @@ With ARG, do it that many times."
         (prettier-elisp-delete-whitespace-forward)
         (pcase type
           ((or 'defun 'cl-defun 'defhydra 'defclass 'cl-defclass
-               'defmacro 'cl-defmethod)
+               'defmacro 'cl-defmethod
+               'transient-define-infix
+               'transient-define-argument
+               'transient-define-prefix
+               'transient-define-suffix)
            (prettier-elisp-forward-sexp 1)
            (prettier-elisp-indent-by-fill-column)
            (prettier-elisp-forward-sexp 1)
@@ -412,21 +427,26 @@ With ARG, do it that many times."
 
 (defun prettier-elisp-indent-parent ()
   "Indent parent form at top level."
-  (let ((pps (syntax-ppss)))
+  (let* ((pps (syntax-ppss))
+         (inside-comment-or-str (or (nth 4 pps)
+                                    (nth 3 pps))))
     (when (> (car pps)
              0)
-      (goto-char (car (nth 9 pps)))))
-  (when-let ((col (and (looking-at "[(]")
-                       (current-column))))
-    (when (> col 0)
-      (let ((pos (point)))
-        (skip-chars-backward "\s\t")
-        (delete-region (point)
-                       pos)
-        (when (> (current-column)
-                 0)
-          (insert "\n")))))
-  (indent-sexp))
+      (goto-char (car (nth 9 pps))))
+    (when-let ((col (and
+                     (not inside-comment-or-str)
+                     (looking-at "[(]")
+                     (current-column))))
+      (when (> col 0)
+        (let ((pos (point)))
+          (skip-chars-backward "\s\t")
+          (delete-region (point)
+                         pos)
+          (when (> (current-column)
+                   0)
+            (insert "\n")))))
+    (unless inside-comment-or-str
+      (indent-sexp))))
 
 (defun prettier-elisp-get-bounds-to-narrow ()
   "Get bounds of thing to narrow."
@@ -533,13 +553,14 @@ With ARG, do it that many times."
     (when prettier-elisp-newline-symbols
       (goto-char (point-min))
       (save-match-data
-        (while (let ((pos (point))
+        (while
+            (let ((pos (point))
                      (end))
                  (setq end (prettier-elisp-forward-list 1))
-                 (unless
-                     (equal pos end)
+                 (unless (equal pos end)
                    end))
-          (let ((sexp-start (save-excursion (prettier-elisp-backward-list)
+          (let ((sexp-start (save-excursion
+                              (prettier-elisp-backward-list)
                                             (point))))
             (when (and
                    (< sexp-start
@@ -564,8 +585,10 @@ With ARG, do it that many times."
 (defun prettier-elisp ()
   "Format current defun at point and multy lines in buffer."
   (interactive)
-  (save-match-data (prettier-elisp-ensure-newlines))
-  (save-match-data (prettier-elisp-current)))
+  (save-match-data
+    (prettier-elisp-ensure-newlines))
+  (save-match-data
+    (prettier-elisp-current)))
 
 ;;;###autoload
 (defun prettier-elisp-format-buffer ()
@@ -591,8 +614,8 @@ With ARG, do it that many times."
   :lighter " Prettier"
   :global nil
   (if prettier-elisp-mode
-      (add-hook 'before-save-hook 'prettier-elisp nil 'local)
-    (remove-hook 'before-save-hook 'prettier-elisp 'local)))
+      (add-hook 'before-save-hook #'prettier-elisp nil 'local)
+    (remove-hook 'before-save-hook #'prettier-elisp 'local)))
 
 (provide 'prettier-elisp)
 ;;; prettier-elisp.el ends here
