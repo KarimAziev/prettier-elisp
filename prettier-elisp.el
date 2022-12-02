@@ -207,12 +207,19 @@ With ARG, do it that many times."
             (save-excursion
               (prettier-elisp-move-with 'forward-sexp 1))))))
 
+(defun prettier-elisp-inside-string-or-comment-p (&optional pos)
+  "Return non nil if position POS is inside in string or comment."
+  (let ((pps (syntax-ppss pos)))
+    (or (nth 3 pps)
+        (nth 4 pps))))
+
 (defun prettier-elisp-bounds-of-sexp-at-point ()
   "Return bounds of exp at point."
-  (let ((start (point)))
-    (save-excursion
-      (when (prettier-elisp-move-with 'forward-sexp 1)
-        (cons start (point))))))
+  (unless (prettier-elisp-inside-string-or-comment-p)
+    (let ((start (point)))
+      (save-excursion
+        (when (prettier-elisp-move-with 'forward-sexp 1)
+          (cons start (point)))))))
 
 (defun prettier-elisp-symbol-at-point ()
   "Return symbol at point."
