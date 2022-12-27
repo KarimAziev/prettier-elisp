@@ -604,6 +604,16 @@ With ARG, do it that many times."
     (buffer-string)))
 
 ;;;###autoload
+(defun prettier-elisp-to-string (sexp)
+  "Format SEXP and return result."
+  (with-temp-buffer
+    (insert (prin1-to-string sexp))
+    (delay-mode-hooks
+      (emacs-lisp-mode)
+      (prettier-elisp-format-buffer))
+    (buffer-string)))
+
+;;;###autoload
 (defun prettier-elisp ()
   "Format current defun at point and multy lines in buffer."
   (interactive)
