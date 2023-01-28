@@ -340,6 +340,7 @@ With ARG, do it that many times."
         ((or
           'require 'let 'if-let 'when-let 'let* 'if-let* 'when-let* 'cond 'when
           'unless 'defgroup 'defun 'cl-defun 'defclass 'defmethod 'cl-defmethod
+          'with-eval-after-load
           'defmacro 'global-set-key 'define-key 'define-minor-mode 'defhydra
           'pretty-hydra-define 'use-package 'use-package! 'defvar-local 'defvar
           'defcustom)
