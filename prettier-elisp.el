@@ -602,7 +602,7 @@ With ARG, do it that many times."
     (delay-mode-hooks
       (emacs-lisp-mode)
       (prettier-elisp-format-buffer))
-    (buffer-string)))
+    (concat (string-trim (buffer-string)) "\n")))
 
 ;;;###autoload
 (defun prettier-elisp-to-string (sexp)
