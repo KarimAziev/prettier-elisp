@@ -123,30 +123,31 @@ as for `re-search-backward'."
   "Move by calling FN N times.
 Return new position if changed, nil otherwise."
   (unless n (setq n 1))
-  (when-let ((str-start (nth 8 (syntax-ppss (point)))))
-    (goto-char str-start))
-  (let ((init-pos (point))
-        (pos)
-        (count (if (> n 0) n (- n))))
-    (while
-        (and (not (= count 0))
-             (when-let ((end (ignore-errors
-                               (funcall fn (if
-                                               (> n 0) 1
-                                             -1))
-                               (point))))
-               (unless (or (= end
-                              (or pos init-pos))
-                           (nth 4 (syntax-ppss (point)))
-                           (and (looking-at ";")
-                                (nth 4 (syntax-ppss (1+ (point))))))
-                 (setq pos end))))
-      (setq count
-            (1- count)))
-    (if (= count 0)
-        pos
-      (goto-char init-pos)
-      nil)))
+  (let ((parse-sexp-ignore-comments nil))
+    (when-let ((str-start (nth 8 (syntax-ppss (point)))))
+      (goto-char str-start))
+    (let ((init-pos (point))
+          (pos)
+          (count (if (> n 0) n (- n))))
+      (while
+          (and (not (= count 0))
+               (when-let ((end (ignore-errors
+                                 (funcall fn (if
+                                                 (> n 0) 1
+                                               -1))
+                                 (point))))
+                 (unless (or (= end
+                                (or pos init-pos))
+                             (nth 4 (syntax-ppss (point)))
+                             (and (looking-at ";")
+                                  (nth 4 (syntax-ppss (1+ (point))))))
+                   (setq pos end))))
+        (setq count
+              (1- count)))
+      (if (= count 0)
+          pos
+        (goto-char init-pos)
+        nil))))
 
 (defun prettier-elisp-backward-sexp (&optional arg)
   "Move backward up across ARG balanced group of parentheses.
@@ -236,15 +237,27 @@ With ARG, do it that many times."
 
 (defun prettier-elisp-delete-whitespace-forward ()
   "Delete whitespace at point."
-  (delete-region (point)
-                 (+ (point)
-                    (skip-chars-forward "\s\t\n\r\f"))))
+  (let* ((start (point))
+         (end (+ start
+                 (skip-chars-forward "\s\t\n\r\f"))))
+    (while (and (looking-at ";")
+                (not (bobp)))
+      (forward-comment 1)
+      (skip-chars-forward "\s\t")
+      (setq end start))
+    (delete-region start
+                   end)))
 
 (defun prettier-elisp-delete-whitespace-backward ()
   "Delete whitespace at point."
-  (delete-region (point)
-                 (+ (point)
-                    (skip-chars-backward "\s\t\n\r\f"))))
+  (let* ((start (point))
+         (end (+ start
+                 (skip-chars-backward "\s\t\n\r\f"))))
+    (when (nth 4 (syntax-ppss (point)))
+      (forward-line 1)
+      (setq end (point)))
+    (delete-region start
+                   end)))
 
 (defun prettier-elisp-line-empty-p ()
   "Return t if current line is empty."
@@ -575,9 +588,13 @@ With ARG, do it that many times."
 
 (defun prettier-elisp-ensure-lines ()
   "Remove or add new lines at the start and end of sexp."
-  (when (save-excursion (not (prettier-elisp-move-with 'backward-sexp)))
+  (when (save-excursion
+          (not (prettier-elisp-move-with 'backward-sexp)))
     (prettier-elisp-delete-whitespace-backward)
-     (newline 2))
+    (when (not (save-excursion
+                 (forward-line -1)
+                 (looking-at ";;;###autoload")))
+      (newline 2)))
   (let* ((line-end-pos (line-end-position))
          (sexp-end-pos (progn (forward-sexp 1)
                               (point)))
