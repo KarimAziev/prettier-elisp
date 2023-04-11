@@ -1,16 +1,45 @@
 * prettier-elisp
 
-  Formats on save the current elisp function at point.
+Minor Mode To Format Emacs Lisp Code.
 
 ** Installation
 
-   Download repo or install the package with use-package and straight.
+Emacs >= 27.1 is required.
 
-   #+BEGIN_SRC elisp
+*** Manual
+
+Download the source code and put it wherever you like, e.g. into =~/.emacs.d/prettier-elisp/=
+
+#+begin_src shell :eval no
+git clone https://github.com/KarimAziev/prettier-elisp.git ~/.emacs.d/prettier-elisp/
+#+end_src
+
+Add the downloaded directory to the load path:
+
+#+begin_src elisp :eval no
+(add-to-list 'load-path "~/.emacs.d/prettier-elisp/")
+(require 'prettier-elisp)
+#+end_src
+
+#+begin_src elisp :eval no
 (use-package prettier-elisp
   :straight (prettier-elisp
+             :repo "KarimAziev/prettier-elisp"
              :type git
-             :host github
-             :repo "KarimAziev/prettier-elisp")
-  :hook ((emacs-lisp-mode . prettier-elisp-mode)))
-   #+END_SRC
+             :host github))
+#+end_src
+
+** Minor modes
+
+*** ~prettier-elisp-mode~
+Format current top level form on file save when this mode is turned on.
+*** ~prettier-elisp-buffer-mode~
+Format whole buffer on file save when this mode is turned on.
+** Commands
+
+*** ~prettier-elisp-buffer~
+Format all buffer.
+*** ~prettier-elisp~
+Format current top level form.
+*** ~prettier-elisp-ensure-top-level-newlines~
+Format lines before and after top forms.
