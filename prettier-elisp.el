@@ -264,6 +264,27 @@ With ARG, do it that many times."
                  (+ (point)
                     (skip-chars-forward "\s\t\n\r\f"))))
 
+(defun prettier-elisp-forward-comments ()
+	"Forward comments if point is on the comment start."
+	(when (looking-at comment-start)
+		(forward-comment most-positive-fixnum)))
+
+(defun prettier-elisp-delete-whitespace-forward-unless-comment ()
+	"Delete whitespace at point if there are no comment after."
+	(let ((beg (point))
+				(end))
+		(setq end (+ beg (skip-chars-forward "\s\t")))
+		(if (looking-at comment-start)
+				(forward-comment most-positive-fixnum)
+			(when (> end beg)
+				(delete-region beg end))
+			(setq beg (point))
+			(setq end (+ beg (skip-chars-forward "\s\t\r\f\n")))
+			(when (> end beg)
+				(if (looking-at comment-start)
+						(forward-comment most-positive-fixnum)
+					(delete-region beg end))))))
+
 (defun prettier-elisp-line-empty-p ()
   "Return t if current line is empty."
   (string-empty-p
@@ -319,15 +340,15 @@ With ARG, do it that many times."
         (prettier-elisp-new-line-and-indent)))))
 
 (defun prettier-elisp-ensure-list-lines ()
-  "Ensure thet every list is on own line."
-  (while (prettier-elisp-forward-sexp 1)
+	"Ensure thet every list is on own line."
+	(while (prettier-elisp-forward-sexp 1)
     (when (looking-back ")\\|]" 0)
       (save-excursion
         (prettier-elisp-backward-sexp 1)
         (when (prettier-elisp-move-with 'down-list 1)
-          (prettier-elisp-delete-whitespace-forward)
+          (prettier-elisp-delete-whitespace-forward-unless-comment)
           (prettier-elisp-ensure-list-lines)
-          (prettier-elisp-delete-whitespace-forward)))
+          (prettier-elisp-delete-whitespace-forward-unless-comment)))
       (when (save-excursion
               (when (prettier-elisp-re-search-forward "[^\s\t]" nil t 1)
                 (forward-char -1)
@@ -342,10 +363,13 @@ With ARG, do it that many times."
     (when-let ((symb
                 (symbol-at-point)))
       (pcase symb
-        ((or 'save-excursion
+				((or 'save-excursion
              'save-restriction
              'save-match-data)
-         (when (looking-at "[\s\t]")
+         (when (and (looking-at "[\s\t]")
+										(save-excursion
+											(skip-chars-forward "\s\t")
+											(not (looking-at comment-start))))
            (prettier-elisp-delete-whitespace-forward)
            (prettier-elisp-new-line-and-indent)))
         ('pcase
@@ -357,10 +381,10 @@ With ARG, do it that many times."
             (prettier-elisp-new-line-and-indent)))
         ((or
           'require 'let 'if-let 'when-let 'let* 'if-let* 'when-let* 'cond 'when
-          'unless 'defgroup 'defun 'cl-defun 'defclass 'defmethod 'cl-defmethod
-          'with-eval-after-load 'defmacro 'global-set-key 'define-key
-          'define-minor-mode 'defhydra 'pretty-hydra-define 'use-package
-          'use-package! 'defvar-local 'defvar 'defcustom)
+					'unless 'defgroup 'defun 'cl-defun 'defclass 'defmethod 'cl-defmethod
+					'with-eval-after-load 'defmacro 'global-set-key 'define-key
+					'define-minor-mode 'defhydra 'pretty-hydra-define 'use-package
+					'use-package! 'defvar-local 'defvar 'defcustom)
          (save-excursion
            (prettier-elisp-backward-up-list 1)
            (prettier-elisp-new-line-and-indent))
@@ -385,7 +409,7 @@ With ARG, do it that many times."
                     (car-safe
                      (prettier-elisp-get-list-at-point))
                     '(defcustom defgroup use-package! use-package
-                       transient-define-argument transient-define-prefix
+											 transient-define-argument transient-define-prefix
                        transient-define-suffix transient-define-infix)))
                  (save-excursion
                    (when (prettier-elisp-forward-sexp 1)
