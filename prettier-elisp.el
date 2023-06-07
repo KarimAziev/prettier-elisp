@@ -45,6 +45,60 @@
   '(url-link
     :tag "Repository" "https://github.com/KarimAziev/prettier-elisp"))
 
+
+(defvar prettier-elisp--errors nil
+  "List of errors and warnings for the current buffer.
+This is bound dynamically while the checks run.")
+
+(defun prettier-elisp--error (line col type message)
+  "Construct a datum for error at LINE and COL with TYPE and MESSAGE."
+  (push (list line col type message) prettier-elisp--errors))
+
+(defun prettier-elisp--error-at-point (type message &optional pos)
+  "Construct a datum for error at POS with TYPE and MESSAGE.
+POS defaults to `point'."
+  (save-excursion
+    (when pos
+      (goto-char pos))
+    (prettier-elisp--error (line-number-at-pos) (- (point) (line-beginning-position)) type message)))
+
+(defun prettier-elisp--inside-comment-or-string-p ()
+  "Return non-nil if point is inside a comment or string."
+  (let ((ppss (save-match-data (syntax-ppss))))
+    (or (nth 3 ppss) (nth 4 ppss))))
+
+(defun prettier-elisp--map-regexp-match (regexp callback)
+	"For every match of REGEXP, call CALLBACK with the first match group.
+If callback returns non-nil, the return value - which must be a
+list - will be applied to `prettier-elisp--error-at-point'.  If
+REGEXP doesn't produce a match group 1, then match group
+0 (ie. the whole match string string) will be passed to
+CALLBACK."
+	(save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward regexp nil t)
+      (let ((sym (or (match-string-no-properties 1)
+                     (match-string-no-properties 0))))
+        (save-excursion
+          (goto-char (or (match-beginning 1)
+                         (match-beginning 0)))
+          (funcall callback sym))))))
+
+(defun prettier-elisp--fix-lonely-parens ()
+	"Warn about dangling closing parens."
+	(prettier-elisp--map-regexp-match
+   "^\\s-*?\\()\\)"
+   (lambda (_)
+     ;; Allow dangling parentheses if the preceding line ends with a comment, as
+     ;; it's not uncommon even in idiomatic lisp.
+		 (when-let* ((end (point))
+								 (start
+									(save-excursion
+										(skip-chars-backward "\s\t\r\n\f")
+										(when (not (nth 4 (syntax-ppss)))
+											(point)))))
+			 (delete-region start end)))))
+
 (defun prettier-elisp-re-search-forward-inner (regexp &optional bound count)
   "Helper function for `prettier-elisp-re-search-forward'.
 Arguments REGEXP, BOUND, COUNT has the same meaning as for `re-search-forward'."
@@ -284,7 +338,7 @@ With ARG, do it that many times."
                (> (current-column) fill-column))
       (prettier-elisp-backward-sexp 1)
       (prettier-elisp-new-line-and-indent)
-      (prettier-elisp-forward-sexp 1))
+			(prettier-elisp-forward-sexp 1))
     (when-let ((symb
                 (symbol-at-point)))
       (pcase symb
@@ -403,9 +457,11 @@ With ARG, do it that many times."
         (while (prettier-elisp-move-with 'backward-up-list)
           (indent-sexp))))))
 
+
+
 (defun prettier-elisp-format (body)
-  "Format BODY."
-  (with-temp-buffer
+	"Format BODY."
+	(with-temp-buffer
     (erase-buffer)
     (let ((emacs-lisp-mode-hook nil))
       (emacs-lisp-mode)
@@ -420,6 +476,8 @@ With ARG, do it that many times."
             (let ((beg (match-beginning 0)))
               (delete-region (1+ beg)
                              (point))))))
+			(save-match-data
+				(prettier-elisp--fix-lonely-parens))
       (save-excursion
         (save-match-data
           (while (prettier-elisp-re-search-forward
@@ -436,13 +494,13 @@ With ARG, do it that many times."
         (save-match-data
           (while
               (prettier-elisp-re-search-forward
-               "(\\([\n\t\s]+\\)[a-zZ-A0-9:.+$!-]" nil t 1)
+               "(\\([\n\t\s]+\\)[a-z0-9:.+$!-]" nil t 1)
             (replace-match "" nil nil nil 1))))
       (save-excursion
         (save-match-data
           (while
               (prettier-elisp-re-search-forward
-               "[a-zZ-A0-9:.+$!-]\\([\n\t\s]+\\))" nil t 1)
+               "[a-zZ0-9:.+$!-]\\([\n\t\s]+\\))" nil t 1)
             (when-let ((end (1- (point)))
                        (start
                         (save-excursion
@@ -456,7 +514,7 @@ With ARG, do it that many times."
         (save-match-data
           (while
               (prettier-elisp-re-search-forward
-               "[a-zZ-A0-9:.+$!-]\\((\\)" nil t 1)
+               "[a-z0-9:.+$!-]\\((\\)" nil t 1)
             (replace-match "\s(" nil nil nil 1))))
       (save-excursion
         (save-match-data
@@ -657,6 +715,7 @@ With ARG, do it that many times."
   (if prettier-elisp-buffer-mode
       (add-hook 'before-save-hook #'prettier-elisp-buffer nil 'local)
     (remove-hook 'before-save-hook #'prettier-elisp-buffer 'local)))
+
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-mode
