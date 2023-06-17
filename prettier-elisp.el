@@ -7,6 +7,7 @@
 ;; Keywords: convenience edit elisp
 ;; Version: 0.2.0
 ;; Package-Requires: ((emacs "27.1"))
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -45,6 +46,11 @@
   '(url-link
     :tag "Repository" "https://github.com/KarimAziev/prettier-elisp"))
 
+(defcustom prettier-elisp-pre-format-hooks '(whitespace-cleanup)
+  "Hooks to run before formatting."
+  :group 'prettier-elisp
+  :type '(hook :options (whitespace-cleanup)))
+
 
 (defvar prettier-elisp--errors nil
   "List of errors and warnings for the current buffer.
@@ -68,13 +74,13 @@ POS defaults to `point'."
     (or (nth 3 ppss) (nth 4 ppss))))
 
 (defun prettier-elisp--map-regexp-match (regexp callback)
-	"For every match of REGEXP, call CALLBACK with the first match group.
+  "For every match of REGEXP, call CALLBACK with the first match group.
 If callback returns non-nil, the return value - which must be a
 list - will be applied to `prettier-elisp--error-at-point'.  If
 REGEXP doesn't produce a match group 1, then match group
 0 (ie. the whole match string string) will be passed to
 CALLBACK."
-	(save-excursion
+  (save-excursion
     (goto-char (point-min))
     (while (re-search-forward regexp nil t)
       (let ((sym (or (match-string-no-properties 1)
@@ -85,19 +91,19 @@ CALLBACK."
           (funcall callback sym))))))
 
 (defun prettier-elisp--fix-lonely-parens ()
-	"Warn about dangling closing parens."
-	(prettier-elisp--map-regexp-match
+  "Warn about dangling closing parens."
+  (prettier-elisp--map-regexp-match
    "^\\s-*?\\()\\)"
    (lambda (_)
      ;; Allow dangling parentheses if the preceding line ends with a comment, as
      ;; it's not uncommon even in idiomatic lisp.
-		 (when-let* ((end (point))
-								 (start
-									(save-excursion
-										(skip-chars-backward "\s\t\r\n\f")
-										(when (not (nth 4 (syntax-ppss)))
-											(point)))))
-			 (delete-region start end)))))
+     (when-let* ((end (point))
+                 (start
+                  (save-excursion
+                    (skip-chars-backward "\s\t\r\n\f")
+                    (when (not (nth 4 (syntax-ppss)))
+                      (point)))))
+       (delete-region start end)))))
 
 (defun prettier-elisp-re-search-forward-inner (regexp &optional bound count)
   "Helper function for `prettier-elisp-re-search-forward'.
@@ -265,25 +271,25 @@ With ARG, do it that many times."
                     (skip-chars-forward "\s\t\n\r\f"))))
 
 (defun prettier-elisp-forward-comments ()
-	"Forward comments if point is on the comment start."
-	(when (looking-at comment-start)
-		(forward-comment most-positive-fixnum)))
+  "Forward comments if point is on the comment start."
+  (when (looking-at comment-start)
+    (forward-comment most-positive-fixnum)))
 
 (defun prettier-elisp-delete-whitespace-forward-unless-comment ()
-	"Delete whitespace at point if there are no comment after."
-	(let ((beg (point))
-				(end))
-		(setq end (+ beg (skip-chars-forward "\s\t")))
-		(if (looking-at comment-start)
-				(forward-comment most-positive-fixnum)
-			(when (> end beg)
-				(delete-region beg end))
-			(setq beg (point))
-			(setq end (+ beg (skip-chars-forward "\s\t\r\f\n")))
-			(when (> end beg)
-				(if (looking-at comment-start)
-						(forward-comment most-positive-fixnum)
-					(delete-region beg end))))))
+  "Delete whitespace at point if there are no comment after."
+  (let ((beg (point))
+        (end))
+    (setq end (+ beg (skip-chars-forward "\s\t")))
+    (if (looking-at comment-start)
+        (forward-comment most-positive-fixnum)
+      (when (> end beg)
+        (delete-region beg end))
+      (setq beg (point))
+      (setq end (+ beg (skip-chars-forward "\s\t\r\f\n")))
+      (when (> end beg)
+        (if (looking-at comment-start)
+            (forward-comment most-positive-fixnum)
+          (delete-region beg end))))))
 
 (defun prettier-elisp-line-empty-p ()
   "Return t if current line is empty."
@@ -298,7 +304,8 @@ With ARG, do it that many times."
     (when (looking-back "[@`',][\s\t]?+" 0)
       (skip-chars-backward "@`',\s\t"))
     (prettier-elisp-delete-whitespace-forward)
-    (unless (looking-at "\\]\\|)")
+    (unless (or (looking-at "\\]\\|)")
+                (looking-back "\\[\\|(" 0))
       (newline-and-indent))))
 
 (defun prettier-elisp-indent-by-fill-column ()
@@ -340,8 +347,8 @@ With ARG, do it that many times."
         (prettier-elisp-new-line-and-indent)))))
 
 (defun prettier-elisp-ensure-list-lines ()
-	"Ensure thet every list is on own line."
-	(while (prettier-elisp-forward-sexp 1)
+  "Ensure thet every list is on own line."
+  (while (prettier-elisp-forward-sexp 1)
     (when (looking-back ")\\|]" 0)
       (save-excursion
         (prettier-elisp-backward-sexp 1)
@@ -352,24 +359,25 @@ With ARG, do it that many times."
       (when (save-excursion
               (when (prettier-elisp-re-search-forward "[^\s\t]" nil t 1)
                 (forward-char -1)
-                (looking-at "[\\[(]")))
+                (and (looking-at "[\\[(]")
+                     (not (looking-back "[\\[(]" 0)))))
         (prettier-elisp-new-line-and-indent)))
     (when (and (save-excursion
                  (prettier-elisp-backward-sexp 2))
                (> (current-column) fill-column))
       (prettier-elisp-backward-sexp 1)
       (prettier-elisp-new-line-and-indent)
-			(prettier-elisp-forward-sexp 1))
+      (prettier-elisp-forward-sexp 1))
     (when-let ((symb
                 (symbol-at-point)))
       (pcase symb
-				((or 'save-excursion
+        ((or 'save-excursion
              'save-restriction
              'save-match-data)
          (when (and (looking-at "[\s\t]")
-										(save-excursion
-											(skip-chars-forward "\s\t")
-											(not (looking-at comment-start))))
+                    (save-excursion
+                      (skip-chars-forward "\s\t")
+                      (not (looking-at comment-start))))
            (prettier-elisp-delete-whitespace-forward)
            (prettier-elisp-new-line-and-indent)))
         ('pcase
@@ -381,10 +389,10 @@ With ARG, do it that many times."
             (prettier-elisp-new-line-and-indent)))
         ((or
           'require 'let 'if-let 'when-let 'let* 'if-let* 'when-let* 'cond 'when
-					'unless 'defgroup 'defun 'cl-defun 'defclass 'defmethod 'cl-defmethod
-					'with-eval-after-load 'defmacro 'global-set-key 'define-key
-					'define-minor-mode 'defhydra 'pretty-hydra-define 'use-package
-					'use-package! 'defvar-local 'defvar 'defcustom)
+          'unless 'defgroup 'defun 'cl-defun 'defclass 'defmethod 'cl-defmethod
+          'with-eval-after-load 'defmacro 'global-set-key 'define-key
+          'define-minor-mode 'defhydra 'pretty-hydra-define 'use-package
+          'use-package! 'defvar-local 'defvar 'defcustom)
          (save-excursion
            (prettier-elisp-backward-up-list 1)
            (prettier-elisp-new-line-and-indent))
@@ -409,7 +417,7 @@ With ARG, do it that many times."
                     (car-safe
                      (prettier-elisp-get-list-at-point))
                     '(defcustom defgroup use-package! use-package
-											 transient-define-argument transient-define-prefix
+                       transient-define-argument transient-define-prefix
                        transient-define-suffix transient-define-infix)))
                  (save-excursion
                    (when (prettier-elisp-forward-sexp 1)
@@ -462,7 +470,8 @@ With ARG, do it that many times."
            (if (not (looking-at "\""))
                (insert "\s")
              (prettier-elisp-new-line-and-indent)
-             (prettier-elisp-forward-sexp 1))
+             (prettier-elisp-forward-sexp
+              1))
            (prettier-elisp-new-line-and-indent))
           ((or 'defgroup 'defcustom)
            (prettier-elisp-forward-sexp 1)
@@ -484,8 +493,8 @@ With ARG, do it that many times."
 
 
 (defun prettier-elisp-format (body)
-	"Format BODY."
-	(with-temp-buffer
+  "Format BODY."
+  (with-temp-buffer
     (erase-buffer)
     (let ((emacs-lisp-mode-hook nil))
       (emacs-lisp-mode)
@@ -500,8 +509,8 @@ With ARG, do it that many times."
             (let ((beg (match-beginning 0)))
               (delete-region (1+ beg)
                              (point))))))
-			(save-match-data
-				(prettier-elisp--fix-lonely-parens))
+      (save-match-data
+        (prettier-elisp--fix-lonely-parens))
       (save-excursion
         (save-match-data
           (while (prettier-elisp-re-search-forward
@@ -720,12 +729,14 @@ With ARG, do it that many times."
 (defun prettier-elisp ()
   "Format current top level form."
   (interactive)
+  (run-hooks 'prettier-elisp-pre-format-hooks)
   (prettier-elisp-current-defun))
 
 ;;;###autoload
 (defun prettier-elisp-buffer ()
   "Format all buffer."
   (interactive)
+  (run-hooks 'prettier-elisp-pre-format-hooks)
   (dolist (fn '(prettier-elisp--ensure-top-level-newlines
                 prettier-elisp-format-all-forms))
     (funcall fn)))
