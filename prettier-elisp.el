@@ -51,6 +51,11 @@
   :group 'prettier-elisp
   :type '(hook :options (whitespace-cleanup)))
 
+(defcustom prettier-elisp-buffer-post-format-hooks '(prettier-elisp-indent-buffer)
+  "Hooks to run after formatting the whole buffer."
+  :group 'prettier-elisp
+  :type '(hook :options (prettier-elisp-indent-buffer)))
+
 
 (defvar prettier-elisp--errors nil
   "List of errors and warnings for the current buffer.
@@ -702,6 +707,11 @@ With ARG, do it that many times."
             (down-list)
             (prettier-elisp-current-defun)))))))
 
+(defun prettier-elisp-indent-buffer ()
+  "Indent whole buffer."
+  (indent-region (point-min)
+                 (point-max)))
+
 ;;;###autoload
 (defun prettier-elisp-ensure-top-level-newlines ()
   "Format lines before and after top forms."
@@ -739,7 +749,8 @@ With ARG, do it that many times."
   (run-hooks 'prettier-elisp-pre-format-hooks)
   (dolist (fn '(prettier-elisp--ensure-top-level-newlines
                 prettier-elisp-format-all-forms))
-    (funcall fn)))
+    (funcall fn))
+  (run-hooks 'prettier-elisp-buffer-post-format-hooks))
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-buffer-mode
