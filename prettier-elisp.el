@@ -51,11 +51,11 @@
   :group 'prettier-elisp
   :type '(hook :options (whitespace-cleanup)))
 
-(defcustom prettier-elisp-buffer-post-format-hooks '(prettier-elisp-indent-buffer)
+(defcustom prettier-elisp-buffer-post-format-hooks
+  '(prettier-elisp-indent-buffer)
   "Hooks to run after formatting the whole buffer."
   :group 'prettier-elisp
   :type '(hook :options (prettier-elisp-indent-buffer)))
-
 
 (defvar prettier-elisp--errors nil
   "List of errors and warnings for the current buffer.
@@ -71,12 +71,16 @@ POS defaults to `point'."
   (save-excursion
     (when pos
       (goto-char pos))
-    (prettier-elisp--error (line-number-at-pos) (- (point) (line-beginning-position)) type message)))
+    (prettier-elisp--error (line-number-at-pos)
+                           (- (point)
+                              (line-beginning-position)) type message)))
 
 (defun prettier-elisp--inside-comment-or-string-p ()
   "Return non-nil if point is inside a comment or string."
-  (let ((ppss (save-match-data (syntax-ppss))))
-    (or (nth 3 ppss) (nth 4 ppss))))
+  (let ((ppss (save-match-data
+                (syntax-ppss))))
+    (or (nth 3 ppss)
+        (nth 4 ppss))))
 
 (defun prettier-elisp--map-regexp-match (regexp callback)
   "For every match of REGEXP, call CALLBACK with the first match group.
@@ -261,6 +265,26 @@ With ARG, do it that many times."
               (vectorp l))
       (or l '()))))
 
+(defun prettier-elisp-delete-whitespace-forward-unless-comment ()
+  "Delete whitespace at point if there are no comment after."
+  (let ((beg (point))
+        (end)
+        (done))
+    (setq end (+ beg (skip-chars-forward "\s\t")))
+    (if (looking-at comment-start)
+        (forward-comment most-positive-fixnum)
+      (when (> end beg)
+        (delete-region beg end)
+        (setq done t))
+      (setq beg (point))
+      (setq end (+ beg (skip-chars-forward "\s\t\r\f\n")))
+      (when (> end beg)
+        (if (looking-at comment-start)
+            (forward-comment most-positive-fixnum)
+          (delete-region beg end)
+          (setq done t)))
+      done)))
+
 (defun prettier-elisp-delete-multi-whitespace-forward ()
   "Delete whitespace at point."
   (when (looking-at "[\s\t\n\r\f]\\{2\\}")
@@ -280,22 +304,6 @@ With ARG, do it that many times."
   (when (looking-at comment-start)
     (forward-comment most-positive-fixnum)))
 
-(defun prettier-elisp-delete-whitespace-forward-unless-comment ()
-  "Delete whitespace at point if there are no comment after."
-  (let ((beg (point))
-        (end))
-    (setq end (+ beg (skip-chars-forward "\s\t")))
-    (if (looking-at comment-start)
-        (forward-comment most-positive-fixnum)
-      (when (> end beg)
-        (delete-region beg end))
-      (setq beg (point))
-      (setq end (+ beg (skip-chars-forward "\s\t\r\f\n")))
-      (when (> end beg)
-        (if (looking-at comment-start)
-            (forward-comment most-positive-fixnum)
-          (delete-region beg end))))))
-
 (defun prettier-elisp-line-empty-p ()
   "Return t if current line is empty."
   (string-empty-p
@@ -308,7 +316,7 @@ With ARG, do it that many times."
   (unless (looking-back "\\(\\([\n]\\)[\s\t]*\\)?[\n][\s\t]?+" 0)
     (when (looking-back "[@`',][\s\t]?+" 0)
       (skip-chars-backward "@`',\s\t"))
-    (prettier-elisp-delete-whitespace-forward)
+    (prettier-elisp-delete-whitespace-forward-unless-comment)
     (unless (or (looking-at "\\]\\|)")
                 (looking-back "\\[\\|(" 0))
       (newline-and-indent))))
@@ -351,10 +359,73 @@ With ARG, do it that many times."
                                              (cdr bounds)))))
         (prettier-elisp-new-line-and-indent)))))
 
+(defun prettier-elisp-join-line ()
+  "Join this line to previous unless the previous one is comment."
+  (when (save-excursion
+          (when (= 0 (forward-line -1))
+            (end-of-line)
+            (not (prettier-elisp--inside-comment-or-string-p))))
+    (join-line)))
+
+(defun prettier-elisp-insert-divider (divider)
+  "Insert DIVIDER."
+  (when (prettier-elisp-delete-whitespace-forward-unless-comment)
+    (insert divider)))
+
+(defun prettier-elisp-looking-at-comment-p ()
+  "Return non nil if next token is comment excluding whitespaces."
+  (looking-at (concat "[\s\t\n\r\f]?+" comment-start)))
+
+(defun prettier-elisp-align-pairs ()
+  "Align pairs."
+  (while
+      (when (symbol-at-point)
+        (prettier-elisp-forward-sexp 1)
+        (when (prettier-elisp-looking-at-comment-p)
+          (forward-comment most-positive-fixnum))
+        (if (and (>= (current-column) fill-column)
+                 (not (prettier-elisp-looking-at-comment-p)))
+            (prettier-elisp-insert-divider "\s"))
+        (if (not (prettier-elisp-get-list-at-point))
+            (prettier-elisp-forward-sexp)
+          (when (prettier-elisp-move-with 'down-list)
+            (prettier-elisp-ensure-list-lines))
+          (prettier-elisp-backward-up-list)
+          (prettier-elisp-forward-sexp))
+        (prettier-elisp-delete-whitespace-forward-unless-comment)
+        (when (save-excursion
+                (prettier-elisp-forward-sexp))
+          (newline-and-indent)
+          t))))
+
+(defun prettier-elisp-consp (sexp)
+  "Return non nil if SEXP is a cons pair."
+  (and sexp
+       (consp sexp)
+       (atom (car sexp))
+       (atom (cdr sexp))))
+
+(defun prettier-elisp-all-conses ()
+  "Fix all conses."
+  (while (prettier-elisp-re-search-backward "\\." nil t 1)
+    (when (prettier-elisp-backward-up-list)
+      (let ((sexp (sexp-at-point)))
+        (save-excursion
+          (pcase sexp
+            ((pred prettier-elisp-consp)
+             (prettier-elisp-move-with 'down-list)
+             (prettier-elisp-delete-whitespace-forward-unless-comment)
+             (when (or (symbol-at-point)
+                       (stringp (sexp-at-point)))
+               (forward-sexp)
+               (prettier-elisp-insert-divider "\s")
+               (when (= 1 (skip-chars-forward "\\."))
+                 (prettier-elisp-insert-divider "\s"))))))))))
+
 (defun prettier-elisp-ensure-list-lines ()
   "Ensure thet every list is on own line."
   (while (prettier-elisp-forward-sexp 1)
-    (when (looking-back ")\\|]" 0)
+    (when (looking-back "\\()\\|]\\)[\s\t]?+" 0)
       (save-excursion
         (prettier-elisp-backward-sexp 1)
         (when (prettier-elisp-move-with 'down-list 1)
@@ -369,7 +440,7 @@ With ARG, do it that many times."
         (prettier-elisp-new-line-and-indent)))
     (when (and (save-excursion
                  (prettier-elisp-backward-sexp 2))
-               (> (current-column) fill-column))
+               (> (current-column)fill-column))
       (prettier-elisp-backward-sexp 1)
       (prettier-elisp-new-line-and-indent)
       (prettier-elisp-forward-sexp 1))
@@ -404,6 +475,10 @@ With ARG, do it that many times."
          (prettier-elisp-delete-whitespace-forward)
          (save-excursion
            (insert "\s")))
+        ((or
+          'setq 'setq-default 'setq-local)
+         (prettier-elisp-insert-divider "\s")
+         (prettier-elisp-align-pairs))
         ((pred keywordp)
          (cond ((not
                  (save-excursion
@@ -495,70 +570,96 @@ With ARG, do it that many times."
         (while (prettier-elisp-move-with 'backward-up-list)
           (indent-sexp))))))
 
-
+(defmacro prettier-elisp-with-temp-buffer (str &rest body)
+  "Insert STR and evaluate BODY in temporarily buffer with elisp syntax."
+  (declare (indent 0)
+           (debug t))
+  `(with-temp-buffer
+     (erase-buffer)
+     (progn
+       (let ((indent-tabs-mode nil))
+         (set-syntax-table emacs-lisp-mode-syntax-table)
+         (setq-local syntax-propertize-function #'elisp-mode-syntax-propertize)
+         (setq-local comment-start ";")
+         (setq-local comment-start-skip ";+ *")
+         (setq-local comment-end "")
+         (setq-local open-paren-in-column-0-is-defun-start t)
+         (setq parse-sexp-ignore-comments t)
+         (syntax-ppss-flush-cache (point-min))
+         (insert ,str)
+         (funcall syntax-propertize-function (point-min)
+                  (point-max))
+         ,@body))))
 
 (defun prettier-elisp-format (body)
   "Format BODY."
-  (with-temp-buffer
-    (erase-buffer)
-    (let ((emacs-lisp-mode-hook nil))
-      (emacs-lisp-mode)
-      (insert body)
-      (goto-char (point-min))
-      (prettier-elisp-indent-inner)
-      (save-excursion
-        (save-match-data
-          (while
-              (prettier-elisp-re-search-forward "[(`']\\([\n\t\r\s\f]+\\)"
-                                                nil t 1)
-            (let ((beg (match-beginning 0)))
-              (delete-region (1+ beg)
-                             (point))))))
+  (prettier-elisp-with-temp-buffer
+    body
+    (goto-char (point-min))
+    (prettier-elisp-indent-inner)
+    (save-excursion
       (save-match-data
-        (prettier-elisp--fix-lonely-parens))
-      (save-excursion
-        (save-match-data
-          (while (prettier-elisp-re-search-forward
-                  "\\(\\]\\|)\\)[\n][\s]?+\\(\\]\\|)\\)" nil t
-                  1)
-            (forward-char -1)
-            (join-line))))
-      (save-excursion
-        (save-match-data
-          (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
-            (let ((beg (match-beginning 0)))
-              (delete-region beg (point))))))
-      (save-excursion
-        (save-match-data
-          (while
-              (prettier-elisp-re-search-forward
-               "(\\([\n\t\s]+\\)[a-z0-9:.+$!-]" nil t 1)
-            (replace-match "" nil nil nil 1))))
-      (save-excursion
-        (save-match-data
-          (while
-              (prettier-elisp-re-search-forward
-               "[a-zZ0-9:.+$!-]\\([\n\t\s]+\\))" nil t 1)
-            (when-let ((end (1- (point)))
-                       (start
-                        (save-excursion
-                          (forward-char -1)
-                          (skip-chars-backward "\s\t\n")
-                          (unless (nth 4
-                                       (syntax-ppss (point)))
-                            (point)))))
-              (delete-region start end)))))
-      (save-excursion
-        (save-match-data
-          (while
-              (prettier-elisp-re-search-forward
-               "[a-z0-9:.+$!-]\\((\\)" nil t 1)
-            (replace-match "\s(" nil nil nil 1))))
-      (save-excursion
-        (save-match-data
-          (while (prettier-elisp-re-search-forward "\\([\s\t]+\\)[\n\r\f]"
-                                                   nil t 1)
-            (replace-match "" nil nil nil 1)))))
+        (while
+            (prettier-elisp-re-search-forward "[(`']\\([\n\t\r\s\f]+\\)"
+                                              nil t 1)
+          (let ((beg (match-beginning 0)))
+            (delete-region (1+ beg)
+                           (point))))))
+    (save-match-data
+      (prettier-elisp--fix-lonely-parens))
+    (save-excursion
+      (save-match-data
+        (while (prettier-elisp-re-search-forward
+                "\\(\\]\\|)\\)[\n][\s]?+\\(\\]\\|)\\)" nil t
+                1)
+          (forward-char -1)
+          (join-line))))
+    (save-excursion
+      (save-match-data
+        (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
+          (let ((beg (match-beginning 0)))
+            (delete-region beg (point))))))
+    (save-excursion
+      (save-match-data
+        (while
+            (prettier-elisp-re-search-forward
+             "(\\([\n\t\s]+\\)[a-z0-9:.+$!-]" nil t 1)
+          (replace-match "" nil nil nil 1))))
+    (save-excursion
+      (save-match-data
+        (while
+            (prettier-elisp-re-search-forward
+             "[a-zZ0-9:.+$!-]\\([\n\t\s]+\\))" nil t 1)
+          (when-let ((end (1- (point)))
+                     (start
+                      (save-excursion
+                        (forward-char -1)
+                        (skip-chars-backward "\s\t\n")
+                        (unless (nth 4
+                                     (syntax-ppss (point)))
+                          (point)))))
+            (delete-region start end)))))
+    (save-excursion
+      (save-match-data
+        (while
+            (prettier-elisp-re-search-forward
+             "[a-z0-9:.+$!-]\\((\\)" nil t 1)
+          (replace-match "\s(" nil nil nil 1))))
+    (save-excursion
+      (save-match-data
+        (while
+            (prettier-elisp-re-search-forward
+             ")\\([\s\t]+\\)[)]" nil t 1)
+          (replace-match "" nil nil nil 1))))
+    (save-excursion
+      (save-match-data
+        (while (prettier-elisp-re-search-forward "\\([\s\t]+\\)[\n\r\f]"
+                                                 nil t 1)
+          (replace-match "" nil nil nil 1))))
+    (save-excursion
+      (goto-char (point-max))
+      (save-match-data
+        (prettier-elisp-all-conses)))
     (string-trim (buffer-string))))
 
 (defun prettier-elisp-current-defun ()
@@ -589,51 +690,27 @@ With ARG, do it that many times."
 (defun prettier-elisp-get-line-rules (sexp)
   "Return amount of lines before SEXP."
   (pcase sexp
-    (`(defvar ,_name)
-     1)
-    (`(defvar ,_name nil)
-     1)
+    (`(defvar ,_name) 1)
+    (`(defvar ,_name nil) 1)
     (`(defvar ,_name ,_)
-     (if (>= (length (format "%s" sexp)) fill-column)
-         2
-       1))
+     (if (>= (length (format "%s" sexp)) fill-column) 2 1))
     (`(defvar-local ,_name ,_)
-     (if (>= (length (format "%s" sexp)) fill-column)
-         2
-       1))
-    (`(require ,_name)
-     1)
-    (`(require ,_name ,_file)
-     1)
-    (`(require ,_name ,_file _no-err)
-     1)
-    (`(provide ,_name ,_file _no-err)
-     1)
-    (`(declare-function ,_name
-                        ,_file)
-     1)
-    (`(declare-function ,_name
-                        ,_file
-                        ,_args)
-     1)
-    (`(declare-function ,_name ,_file ,_args ,_fileonly)
-     1)
-    (`(load ,_name)
-     1)
-    (`(load ,_name  ,_)
-     1)
-    (`(load ,_name  ,_  ,_)
-     1)
-    (`(load ,_name  ,_  ,_  ,_)
-     1)
-    (`(load ,_name  ,_  ,_  ,_ ,_)
-     1)
-    (`(provide _)
-     1)
-    (`(provide)
-     1)
-    (`(provide-theme _)
-     1)
+     (if (>= (length (format "%s" sexp)) fill-column) 2 1))
+    (`(require ,_name) 1)
+    (`(require ,_name ,_file) 1)
+    (`(require ,_name ,_file _no-err) 1)
+    (`(provide ,_name ,_file _no-err) 1)
+    (`(declare-function ,_name ,_file) 1)
+    (`(declare-function ,_name ,_file ,_args) 1)
+    (`(declare-function ,_name ,_file ,_args ,_fileonly) 1)
+    (`(load ,_name) 1)
+    (`(load ,_name ,_) 1)
+    (`(load ,_name ,_ ,_) 1)
+    (`(load ,_name ,_ ,_ ,_) 1)
+    (`(load ,_name ,_ ,_ ,_ ,_) 1)
+    (`(provide _) 1)
+    (`(provide) 1)
+    (`(provide-theme _) 1)
     (_ 2)))
 
 (defun prettier-elisp--ensure-top-level-newlines ()
@@ -761,7 +838,6 @@ With ARG, do it that many times."
   (if prettier-elisp-buffer-mode
       (add-hook 'before-save-hook #'prettier-elisp-buffer nil 'local)
     (remove-hook 'before-save-hook #'prettier-elisp-buffer 'local)))
-
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-mode
