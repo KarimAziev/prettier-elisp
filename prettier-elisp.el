@@ -683,7 +683,11 @@ With ARG, do it that many times."
         (setq replacement (prettier-elisp-format body))
         (unless (or (not body)
                     (not replacement)
-                    (string= body replacement))
+                    (string= body replacement)
+                    (not
+                     (prettier-elisp-compare-strings-ignore-whitespace
+                      body
+                      replacement)))
           (replace-region-contents
            beg end (lambda () replacement)))))))
 
@@ -712,6 +716,14 @@ With ARG, do it that many times."
     (`(provide) 1)
     (`(provide-theme _) 1)
     (_ 2)))
+
+(defun prettier-elisp-compare-strings-ignore-whitespace (string1 string2)
+  "Check if two strings are equal, ignoring whitespace and newlines.
+Argument STRING1 is the first string to compare.
+Argument STRING2 is the second string to compare."
+  (let ((clean-string1 (replace-regexp-in-string "[[:space:]\n]+" "" string1))
+        (clean-string2 (replace-regexp-in-string "[[:space:]\n]+" "" string2)))
+    (string= clean-string1 clean-string2)))
 
 (defun prettier-elisp--ensure-top-level-newlines ()
   "Add new line after top forms."
