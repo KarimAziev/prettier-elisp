@@ -314,6 +314,7 @@ With ARG, do it that many times."
 (defun prettier-elisp-new-line-and-indent ()
   "Insert a newline if none and indent."
   (unless (looking-back "\\(\\([\n]\\)[\s\t]*\\)?[\n][\s\t]?+" 0)
+  ;; relint suppression: Repetition of option
     (when (looking-back "[@`',][\s\t]?+" 0)
       (skip-chars-backward "@`',\s\t"))
     (prettier-elisp-delete-whitespace-forward-unless-comment)
@@ -440,7 +441,8 @@ With ARG, do it that many times."
         (prettier-elisp-new-line-and-indent)))
     (when (and (save-excursion
                  (prettier-elisp-backward-sexp 2))
-               (> (current-column)fill-column))
+               (> (current-column)
+                  fill-column))
       (prettier-elisp-backward-sexp 1)
       (prettier-elisp-new-line-and-indent)
       (prettier-elisp-forward-sexp 1))
@@ -465,6 +467,8 @@ With ARG, do it that many times."
             (prettier-elisp-new-line-and-indent)))
         ((or
           'require 'let 'if-let 'when-let 'let* 'if-let* 'when-let* 'cond 'when
+          'and-let
+          'and-let*
           'unless 'defgroup 'defun 'cl-defun 'defclass 'defmethod 'cl-defmethod
           'with-eval-after-load 'defmacro 'global-set-key 'define-key
           'define-minor-mode 'defhydra 'pretty-hydra-define 'use-package
@@ -521,7 +525,9 @@ With ARG, do it that many times."
   (when-let ((l (or (prettier-elisp-get-list-at-point))))
     (save-excursion
       (forward-char 1)
-      (prettier-elisp-ensure-list-lines))
+      (prettier-elisp-ensure-list-lines)
+      (while (prettier-elisp-move-with 'backward-up-list)
+        (indent-sexp)))
     (when-let* ((symbs (and (proper-list-p l)
                             (symbolp (car-safe l))
                             (seq-take-while #'symbolp l)))
@@ -553,7 +559,7 @@ With ARG, do it that many times."
              (prettier-elisp-forward-sexp
               1))
            (prettier-elisp-new-line-and-indent))
-          ((or 'defgroup 'defcustom)
+          ((or 'defgroup 'defcustom 'define-widget)
            (prettier-elisp-forward-sexp 1)
            (prettier-elisp-delete-multi-whitespace-forward)
            (prettier-elisp-forward-sexp 1)
