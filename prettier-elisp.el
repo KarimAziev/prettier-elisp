@@ -667,8 +667,80 @@ With ARG, do it that many times."
         (prettier-elisp-all-conses)))
     (string-trim (buffer-string))))
 
+(defun prettier-elisp--goto-line (line)
+  "Move cursor to line LINE."
+  (goto-char (point-min))
+  (forward-line (1- line)))
+
+(defun prettier-elisp--apply-rcs-patch (patch-buffer)
+  "Apply an RCS-formatted diff from PATCH-BUFFER to the current buffer."
+  (let ((target-buffer (current-buffer))
+        (line-offset 0))
+    (save-excursion
+      (with-current-buffer patch-buffer
+        (goto-char (point-min))
+        (while (not (eobp))
+          (unless (looking-at "^\\([ad]\\)\\([0-9]+\\) \\([0-9]+\\)")
+            (error
+             "Invalid rcs patch or internal error in prettier-elisp--apply-rcs-patch"))
+          (forward-line)
+          (let ((action (match-string 1))
+                (from (string-to-number (match-string 2)))
+                (len  (string-to-number (match-string 3))))
+            (cond ((equal action "a")
+                   (let ((start (point)))
+                     (forward-line len)
+                     (let ((text (buffer-substring start (point))))
+                       (with-current-buffer target-buffer
+                         (setq line-offset (- line-offset len))
+                         (goto-char (point-min))
+                         (forward-line (- from len line-offset))
+                         (insert text)))))
+                  ((equal action "d")
+                   (with-current-buffer target-buffer
+                     (prettier-elisp--goto-line (- from line-offset))
+                     (setq line-offset (+ line-offset len))
+                     (let ((beg (point)))
+                       (forward-line len)
+                       (delete-region (point) beg))))
+                  (t
+                   (error
+                    "Invalid rcs patch or internal error in prettier-elisp--apply-rcs-patch")))))))))
+
+(defun prettier-elisp-apply-patch (beg end replacement)
+  "Apply a diff patch to the current buffer.
+
+Argument BEG is the beginning position in the buffer where the patch will be
+applied.
+
+Argument END is the ending position in the buffer where the patch will be
+applied.
+
+Argument REPLACEMENT is the string that will replace the text between BEG and
+END."
+  (let* ((outputfile (make-temp-file "prettier-elisp" nil "el"))
+         (patchbuf (get-buffer-create "*prettier elisp patch*"))
+         (coding-system-for-read 'utf-8)
+         (coding-system-for-write 'utf-8)
+         (col (current-column)))
+    (unwind-protect
+        (save-restriction
+          (write-region replacement nil outputfile nil 'silent)
+          (with-current-buffer patchbuf
+            (erase-buffer))
+          (progn
+            (call-process-region beg
+                                 end "diff" nil patchbuf nil "-n"
+                                 "--strip-trailing-cr" "-"
+                                 outputfile)
+            (narrow-to-region beg end)
+            (prettier-elisp--apply-rcs-patch patchbuf)
+            (move-to-column col)))
+      (kill-buffer patchbuf)
+      (delete-file outputfile))))
+
 (defun prettier-elisp-current-defun ()
-  "Prettify current top form."
+  "Format the current Emacs Lisp function definition."
   (when-let* ((buff (current-buffer))
               (pos (point))
               (beg
@@ -693,8 +765,7 @@ With ARG, do it that many times."
                      (prettier-elisp-compare-strings-ignore-whitespace
                       body
                       replacement)))
-          (replace-region-contents
-           beg end (lambda () replacement)))))))
+          (prettier-elisp-apply-patch beg end replacement))))))
 
 (defun prettier-elisp-get-line-rules (sexp)
   "Return amount of lines before SEXP."
