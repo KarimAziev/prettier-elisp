@@ -1077,7 +1077,7 @@ the current defun."
     (save-match-data
       (while (re-search-forward "[^ \t\n;]\\([ \t]+\\)$" nil t 1)
         (let ((beg (match-beginning 1))
-              (end (match-end 2)))
+              (end (match-end 1)))
           (unless (nth 3 (syntax-ppss (point)))
             (delete-region beg end)))))))
 
