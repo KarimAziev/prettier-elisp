@@ -46,7 +46,8 @@
   '(url-link
     :tag "Repository" "https://github.com/KarimAziev/prettier-elisp"))
 
-(defcustom prettier-elisp-pre-format-hooks '(whitespace-cleanup)
+(defcustom prettier-elisp-pre-format-hooks '(whitespace-cleanup
+                                             prettier-elisp-remove-whitespace-end-of-line)
   "Hooks to run before formatting."
   :group 'prettier-elisp
   :type '(hook :options (whitespace-cleanup)))
@@ -1067,6 +1068,18 @@ the current defun."
   "Indent whole buffer."
   (indent-region (point-min)
                  (point-max)))
+
+
+(defun prettier-elisp-remove-whitespace-end-of-line ()
+  "Remove trailing whitespace from lines."
+  (save-excursion
+    (goto-char (point-min))
+    (save-match-data
+      (while (re-search-forward "[^ \t\n;]\\([ \t]+\\)$" nil t 1)
+        (let ((beg (match-beginning 1))
+              (end (match-end 2)))
+          (unless (nth 3 (syntax-ppss (point)))
+            (delete-region beg end)))))))
 
 ;;;###autoload
 (defun prettier-elisp-ensure-top-level-newlines ()
