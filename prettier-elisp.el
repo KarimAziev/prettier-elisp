@@ -86,18 +86,11 @@ POS defaults to `point'."
   `(with-temp-buffer
      (erase-buffer)
      (progn
-       (let ((indent-tabs-mode nil))
-        (set-syntax-table emacs-lisp-mode-syntax-table)
-        (setq-local syntax-propertize-function #'elisp-mode-syntax-propertize)
-        (setq-local comment-start ";")
-        (setq-local comment-start-skip ";+ *")
-        (setq-local comment-end "")
-        (setq-local open-paren-in-column-0-is-defun-start t)
-        (setq parse-sexp-ignore-comments t)
-        (syntax-ppss-flush-cache (point-min))
+       (let ((emacs-lisp-mode-hook nil)
+             (indent-tabs-mode nil)
+             (parse-sexp-ignore-comments t))
+        (emacs-lisp-mode)
         (insert ,str)
-        (funcall syntax-propertize-function (point-min)
-         (point-max))
         ,@body))))
 
 (defun prettier-elisp--map-regexp-match (regexp callback)
