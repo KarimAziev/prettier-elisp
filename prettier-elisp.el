@@ -1154,24 +1154,23 @@ the current defun."
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-buffer-mode
-  "Toggle automatic formatting whole buffer code before saving.
+  "Toggle automatic formatting of the entire buffer before saving.
 
-When enabled, it hooks into the buffer's save action to perform the formatting.
+When enabled, this mode adds a hook to format the entire Emacs Lisp buffer
+before it is saved.
 
-This mode automatically formats the entire buffer before saving, ensuring
-consistent and clean code style.
+It overrides the default indentation function for Elisp code with a custom one
+that formats Emacs Lisp code automatically, applying rules for proper
+indentation, line breaks, and whitespace management to enhance code readability
+and maintainability.
 
-It applies various formatting rules such as proper indentation, line breaks, and
-whitespace handling to make the code more readable and maintainable.
+Use the `prettier-elisp' command to manually format the current Emacs Lisp
+function definition. Use the `prettier-elisp-buffer' command to format the
+entire buffer manually.
 
-To manually format the current Emacs Lisp function definition, use the
-`prettier-elisp' command.
-
-To manually format the whole bufer, use the `prettier-elisp-buffer' command.
-
-This mode also provides customization options through
-`prettier-elisp-pre-format-hooks' to run additional formatting functions before
-formatting takes place."
+This mode offers customization options through
+`prettier-elisp-pre-format-hooks', allowing the execution of additional
+formatting functions prior to the automatic formatting."
   :lighter " Prettier-buffer"
   :global nil
   (prettier-elisp-mode -1)
@@ -1184,22 +1183,22 @@ formatting takes place."
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-mode
-  "Enable automatic formatting of Elisp code before saving the buffer.
+  "Toggle automatic formatting of the current definition before saving the buffer.
 
-When enabled, this mode overrides the default indentation function for Elisp
-code.
+When enabled, this mode adds a hook to format the current Emacs Lisp function
+definition before the buffer is saved.
 
-It also adds a hook to format the current Emacs Lisp function definition before
-saving the buffer.
+It also overrides the default indentation function for Elisp
+code with a custom one that automatically formats Emacs Lisp code.
 
-To manually format the current Emacs Lisp function definition, use the
-`prettier-elisp' command.
+Use the `prettier-elisp' command to manually format the current Emacs Lisp
+function definition.
 
-To manually format the whole bufer, use the `prettier-elisp-buffer' command.
+Use the `prettier-elisp-buffer' command to format the entire buffer manually.
 
-This mode also provides customization options through
+This mode provides customization options through
 `prettier-elisp-pre-format-hooks' to run additional formatting functions before
-formatting takes place."
+the automatic formatting."
   :lighter " Prettier-defun"
   :global nil
   (advice-remove #'calculate-lisp-indent #'prettier-elisp-calculate-lisp-indent)

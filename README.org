@@ -2,7 +2,7 @@
 
 * About
 
-Minor mode to format Emacs Lisp code.
+A minor mode for formatting Emacs Lisp code.
 
 * Table of Contents                                       :TOC_2_gh:QUOTE:
 #+BEGIN_QUOTE
@@ -36,7 +36,7 @@ Minor mode to format Emacs Lisp code.
 
 ** Manual installation
 
-Download the source code and put it wherever you like, e.g. into =~/.emacs.d/prettier-elisp/=
+Download the source code and put it in a location of your choice, e.g., into =~/.emacs.d/prettier-elisp/=:
 
 #+begin_src shell :eval no
 git clone https://github.com/KarimAziev/prettier-elisp.git ~/.emacs.d/prettier-elisp/
@@ -51,10 +51,10 @@ Add the downloaded directory to the load path:
 
 * Usage
 
-- =M-x prettier-elisp-mode= - To enable automatic and manual formatting of Elisp code.
-- =M-x prettier-elisp-buffer-mode= - To enable formatting whole buffer code before saving.
-- =M-x prettier-elisp= - To manually format the current Emacs Lisp function definition.
-- =M-x prettier-elisp-buffer= To manually format the whole bufer.
+- =M-x prettier-elisp-mode= - Toggle automatic formatting of the current definition before saving the buffer.
+- =M-x prettier-elisp-buffer-mode= - Toggle automatic formatting of the whole buffer before saving.
+- =M-x prettier-elisp= - Manually format the current function definition.
+- =M-x prettier-elisp-buffer= - Manually format the entire buffer.
 
 * Customization
 
@@ -62,9 +62,9 @@ Add the downloaded directory to the load path:
 #+begin_quote
 [!NOTE]
 
-You may want also to adjust the value of the variable =fill-column=.
+You may also want to adjust the value of the =fill-column= variable. 
 #+end_quote
 
-- ~prettier-elisp-buffer-post-format-hooks~ Hooks to run after formatting the whole buffer.
-- ~prettier-elisp-pre-format-hooks~ Hooks to run before formatting.
+- ~prettier-elisp-buffer-post-format-hooks~ - Hooks to run after formatting the whole buffer.
+- ~prettier-elisp-pre-format-hooks~ - Hooks to run before formatting.
 
