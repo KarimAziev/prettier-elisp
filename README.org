@@ -2,7 +2,7 @@
 
 * About
 
-Minor mode to format Emacs lisp code.
+Minor mode to format Emacs Lisp code.
 
 * Table of Contents                                       :TOC_2_gh:QUOTE:
 #+BEGIN_QUOTE
