@@ -43,13 +43,38 @@
 
 (defcustom prettier-elisp-pre-format-hooks '(whitespace-cleanup
                                              prettier-elisp-remove-whitespace-end-of-line)
-  "Hooks to run before formatting."
+  "Hooks run before Emacs Lisp code formatting.
+
+A list of functions to be called before formatting Emacs Lisp code with
+Prettier. These hooks are run in the order they appear in the list.
+
+Each function should take no arguments and is expected to operate on the current
+buffer, which will contain the code to be formatted. The default functions are
+`whitespace-cleanup' and `prettier-elisp-remove-whitespace-end-of-line', which
+clean up whitespace issues before the Prettier formatter runs.
+
+To add a function to this hook, use `add-hook'. To remove a function, use
+`remove-hook'. These functions are intended to prepare the code for formatting,
+such as cleaning up whitespace or performing other buffer-local modifications."
   :group 'prettier-elisp
   :type '(hook :options (whitespace-cleanup
                          prettier-elisp-remove-whitespace-end-of-line)))
 
 (defcustom prettier-elisp-buffer-post-format-hooks '(prettier-elisp-indent-buffer)
-  "Hooks to run after formatting the whole buffer."
+  "Hooks run after elisp buffer formatting.
+
+A list of functions to be called after formatting an Emacs Lisp buffer with
+Prettier. These functions are intended to perform additional formatting or
+cleanup tasks on the buffer.
+
+Each element in the list should be a symbol referring to a function that takes
+no arguments and is called with the current buffer set to the buffer that was
+just formatted. The default function provided is `prettier-elisp-indent-buffer',
+which re-indents the buffer according to Emacs Lisp indentation rules.
+
+To add a function to this hook, use `add-hook' with the hook's symbol and the
+function to add. To remove a function, use `remove-hook'. Functions are called
+in the order they are added."
   :group 'prettier-elisp
   :type '(hook :options (prettier-elisp-indent-buffer)))
 
@@ -1110,7 +1135,7 @@ the current defun."
 
 ;;;###autoload
 (defun prettier-elisp ()
-  "Format current top level form."
+  "Format current Emacs Lisp function definition."
   (interactive)
   (run-hooks 'prettier-elisp-pre-format-hooks)
   (prettier-elisp-current-defun))
@@ -1123,14 +1148,31 @@ the current defun."
 
 ;;;###autoload
 (defun prettier-elisp-buffer ()
-  "Format all buffer."
+  "Format Elisp code in the current buffer."
   (interactive)
   (prettier-elisp--buffer))
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-buffer-mode
-  "Format whole buffer on file save when this mode is turned on."
-  :lighter " Prettier"
+  "Toggle automatic formatting whole buffer code before saving.
+
+When enabled, it hooks into the buffer's save action to perform the formatting.
+
+This mode automatically formats the entire buffer before saving, ensuring
+consistent and clean code style.
+
+It applies various formatting rules such as proper indentation, line breaks, and
+whitespace handling to make the code more readable and maintainable.
+
+To manually format the current Emacs Lisp function definition, use the
+`prettier-elisp' command.
+
+To manually format the whole bufer, use the `prettier-elisp-buffer' command.
+
+This mode also provides customization options through
+`prettier-elisp-pre-format-hooks' to run additional formatting functions before
+formatting takes place."
+  :lighter " Prettier-buffer"
   :global nil
   (prettier-elisp-mode -1)
   (remove-hook 'before-save-hook #'prettier-elisp-buffer 'local)
@@ -1142,8 +1184,23 @@ the current defun."
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-mode
-  "Format current top level form on file save when this mode is turned on."
-  :lighter " Prettier"
+  "Enable automatic formatting of Elisp code before saving the buffer.
+
+When enabled, this mode overrides the default indentation function for Elisp
+code.
+
+It also adds a hook to format the current Emacs Lisp function definition before
+saving the buffer.
+
+To manually format the current Emacs Lisp function definition, use the
+`prettier-elisp' command.
+
+To manually format the whole bufer, use the `prettier-elisp-buffer' command.
+
+This mode also provides customization options through
+`prettier-elisp-pre-format-hooks' to run additional formatting functions before
+formatting takes place."
+  :lighter " Prettier-defun"
   :global nil
   (advice-remove #'calculate-lisp-indent #'prettier-elisp-calculate-lisp-indent)
   (remove-hook 'before-save-hook #'prettier-elisp 'local)

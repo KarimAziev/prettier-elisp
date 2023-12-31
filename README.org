@@ -1,12 +1,40 @@
-* prettier-elisp
+#+OPTIONS: ^:nil tags:nil num:nil
 
-Minor Mode To Format Emacs Lisp Code.
+* About
 
-** Installation
+Minor mode to format Emacs lisp code.
 
-Emacs >= 27.1 is required.
+* Table of Contents                                       :TOC_2_gh:QUOTE:
+#+BEGIN_QUOTE
+- [[#about][About]]
+- [[#requirements][Requirements]]
+- [[#installation][Installation]]
+  - [[#with-use-package-and-straightel][With use-package and straight.el]]
+  - [[#manual-installation][Manual installation]]
+- [[#usage][Usage]]
+  - [[#customization][Customization]]
+#+END_QUOTE
 
-*** Manual
+* Requirements
+
+| Name  | Version |
+|-------+---------|
+| Emacs |    27.1 |
+
+
+* Installation
+
+** With use-package and straight.el
+#+begin_src elisp :eval no
+(use-package prettier-elisp
+  :straight (prettier-elisp
+             :type git
+             :host github
+             :repo "KarimAziev/prettier-elisp")
+  :hook ((emacs-lisp-mode . prettier-elisp-mode)))
+#+end_src
+
+** Manual installation
 
 Download the source code and put it wherever you like, e.g. into =~/.emacs.d/prettier-elisp/=
 
@@ -21,25 +49,26 @@ Add the downloaded directory to the load path:
 (require 'prettier-elisp)
 #+end_src
 
-#+begin_src elisp :eval no
-(use-package prettier-elisp
-  :straight (prettier-elisp
-             :repo "KarimAziev/prettier-elisp"
-             :type git
-             :host github))
-#+end_src
+* Usage
 
-** Minor modes
+**** =M-x prettier-elisp-mode= - To enable automatic and manual formatting of Elisp code.
 
-*** ~prettier-elisp-mode~
-Format current top level form on file save when this mode is turned on.
-*** ~prettier-elisp-buffer-mode~
-Format whole buffer on file save when this mode is turned on.
-** Commands
+**** =M-x prettier-elisp-buffer-mode= - To enable formatting whole buffer code before saving.
 
-*** ~prettier-elisp-buffer~
-Format all buffer.
-*** ~prettier-elisp~
-Format current top level form.
-*** ~prettier-elisp-ensure-top-level-newlines~
-Format lines before and after top forms.
+**** =M-x prettier-elisp= - To manually format the current Emacs Lisp function definition.
+
+**** =M-x prettier-elisp-buffer= To manually format the whole bufer.
+
+** Customization
+
+#+begin_quote
+[!NOTE]
+
+You may want also to adjust the value of the variable =fill-column=.
+#+end_quote
+
+**** ~prettier-elisp-buffer-post-format-hooks~
+Hooks to run after formatting the whole buffer.
+**** ~prettier-elisp-pre-format-hooks~
+Hooks to run before formatting.
+
