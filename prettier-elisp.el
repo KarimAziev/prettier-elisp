@@ -33,11 +33,6 @@
 (eval-when-compile
   (require 'subr-x))
 
-(declare-function replace-region-contents "subr-x"
-                  (beg end replace-fn
-                       &optional max-secs
-                       max-costs))
-
 (defgroup prettier-elisp nil
   "Minor mode to format Elisp code on file save."
   :group 'languages
@@ -50,10 +45,10 @@
                                              prettier-elisp-remove-whitespace-end-of-line)
   "Hooks to run before formatting."
   :group 'prettier-elisp
-  :type '(hook :options (whitespace-cleanup)))
+  :type '(hook :options (whitespace-cleanup
+                         prettier-elisp-remove-whitespace-end-of-line)))
 
-(defcustom prettier-elisp-buffer-post-format-hooks
-  '(prettier-elisp-indent-buffer)
+(defcustom prettier-elisp-buffer-post-format-hooks '(prettier-elisp-indent-buffer)
   "Hooks to run after formatting the whole buffer."
   :group 'prettier-elisp
   :type '(hook :options (prettier-elisp-indent-buffer)))
@@ -84,6 +79,27 @@ POS defaults to `point'."
     (or (nth 3 ppss)
         (nth 4 ppss))))
 
+(defmacro prettier-elisp-with-temp-buffer (str &rest body)
+  "Insert STR and evaluate BODY in temporarily buffer with elisp syntax."
+  (declare (indent 0)
+           (debug t))
+  `(with-temp-buffer
+     (erase-buffer)
+     (progn
+       (let ((indent-tabs-mode nil))
+        (set-syntax-table emacs-lisp-mode-syntax-table)
+        (setq-local syntax-propertize-function #'elisp-mode-syntax-propertize)
+        (setq-local comment-start ";")
+        (setq-local comment-start-skip ";+ *")
+        (setq-local comment-end "")
+        (setq-local open-paren-in-column-0-is-defun-start t)
+        (setq parse-sexp-ignore-comments t)
+        (syntax-ppss-flush-cache (point-min))
+        (insert ,str)
+        (funcall syntax-propertize-function (point-min)
+         (point-max))
+        ,@body))))
+
 (defun prettier-elisp--map-regexp-match (regexp callback)
   "For every match of REGEXP, call CALLBACK with the first match group.
 If callback returns non-nil, the return value - which must be a
@@ -104,16 +120,18 @@ CALLBACK."
 (defun prettier-elisp--fix-lonely-parens ()
   "Warn about dangling closing parens."
   (prettier-elisp--map-regexp-match
-   "^\\s-*?\\()\\)"
+   "^\\s-*?\\([])]\\)"
    (lambda (_)
-     ;; Allow dangling parentheses if the preceding line ends with a comment, as
-     ;; it's not uncommon even in idiomatic lisp.
+   ;; Allow dangling parentheses if the preceding line ends with a comment, as
+   ;; it's not uncommon even in idiomatic lisp.
      (when-let* ((end (point))
                  (start
                   (save-excursion
                     (skip-chars-backward "\s\t\r\n\f")
-                    (when (not (nth 4 (syntax-ppss)))
-                      (point)))))
+                    (let ((ppss (syntax-ppss)))
+                      (unless (or (nth 4 ppss)
+                                  (nth 3 ppss))
+                        (point))))))
        (delete-region start end)))))
 
 (defun prettier-elisp-re-search-forward-inner (regexp &optional bound count)
@@ -576,26 +594,6 @@ With ARG, do it that many times."
         (while (prettier-elisp-move-with 'backward-up-list)
           (indent-sexp))))))
 
-(defmacro prettier-elisp-with-temp-buffer (str &rest body)
-  "Insert STR and evaluate BODY in temporarily buffer with elisp syntax."
-  (declare (indent 0)
-           (debug t))
-  `(with-temp-buffer
-     (erase-buffer)
-     (progn
-       (let ((indent-tabs-mode nil))
-         (set-syntax-table emacs-lisp-mode-syntax-table)
-         (setq-local syntax-propertize-function #'elisp-mode-syntax-propertize)
-         (setq-local comment-start ";")
-         (setq-local comment-start-skip ";+ *")
-         (setq-local comment-end "")
-         (setq-local open-paren-in-column-0-is-defun-start t)
-         (setq parse-sexp-ignore-comments t)
-         (syntax-ppss-flush-cache (point-min))
-         (insert ,str)
-         (funcall syntax-propertize-function (point-min)
-                  (point-max))
-         ,@body))))
 
 (defun prettier-elisp-format (body)
   "Format BODY."
@@ -615,16 +613,13 @@ With ARG, do it that many times."
       (prettier-elisp--fix-lonely-parens))
     (save-excursion
       (save-match-data
-        (while (prettier-elisp-re-search-forward
-                "\\(\\]\\|)\\)[\n][\s]*\\(\\]\\|)\\)" nil t
-                1)
-          (forward-char -1)
-          (join-line))))
-    (save-excursion
-      (save-match-data
         (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
           (let ((beg (match-beginning 0)))
             (delete-region beg (point))))))
+    (save-excursion
+      (save-match-data
+        (while (prettier-elisp-re-search-forward "\\()\\)[a-z0-9.]" nil t 1)
+          (replace-match ") " nil nil nil 1))))
     (save-excursion
       (save-match-data
         (while
@@ -870,9 +865,20 @@ Argument STRING2 is the second string to compare."
                    (beg (+ end (skip-chars-backward "\s\t"))))
               (delete-region beg end)))
           (save-excursion
-            (down-list)
-            (prettier-elisp-current-defun)))))))
-
+            (pcase-let* ((`(,start . ,bend)
+                          (bounds-of-thing-at-point 'sexp))
+                         (body (buffer-substring-no-properties
+                                start bend))
+                         (replacement (prettier-elisp-format body)))
+              (unless (or (not body)
+                          (not replacement)
+                          (string= body replacement)
+                          (not
+                           (prettier-elisp-compare-strings-ignore-whitespace
+                            body
+                            replacement)))
+                (delete-region start bend)
+                (insert replacement)))))))))
 
 (defun prettier-elisp-calculate-lisp-indent (&optional parse-start)
   "Calculate indentation for Lisp code.
@@ -880,9 +886,9 @@ Argument STRING2 is the second string to compare."
 Optional argument PARSE-START is a buffer position. If it is a marker or
 integer, it starts parsing at that position. If nil, it begins at the start of
 the current defun."
-;; This line because `calculate-lisp-indent-last-sexp` was defined with
-;; `defvar` with its value ommited, marking it special and only defining it
-;; locally. So if you don't have this, you'll get a void variable error.
+  ;; This line because `calculate-lisp-indent-last-sexp` was defined with
+  ;; `defvar` with its value ommited, marking it special and only defining it
+  ;; locally. So if you don't have this, you'll get a void variable error.
   (defvar calculate-lisp-indent-last-sexp)
   (save-excursion
     (beginning-of-line)
@@ -899,10 +905,10 @@ the current defun."
              (beginning-of-defun))
             (t (setq state parse-start)))
       (unless state
-      ;; Find outermost containing sexp
+        ;; Find outermost containing sexp
         (while (< (point) indent-point)
           (setq state (parse-partial-sexp (point) indent-point 0))))
-          ;; Find innermost containing sexp
+      ;; Find innermost containing sexp
       (while (and retry
                   state
                   (> (elt state 0) 0))
@@ -914,44 +920,44 @@ the current defun."
         ;; Is there a complete sexp since then?
         (if (and calculate-lisp-indent-last-sexp
                  (> calculate-lisp-indent-last-sexp (point)))
-                 ;; Yes, but is there a containing sexp after that?
+            ;; Yes, but is there a containing sexp after that?
             (let ((peek (parse-partial-sexp calculate-lisp-indent-last-sexp
                                             indent-point 0)))
               (if (setq retry (car (cdr peek)))
                   (setq state peek)))))
       (if retry
           nil
-          ;; Innermost containing sexp found
+        ;; Innermost containing sexp found
         (goto-char (1+ containing-sexp))
         (if (not calculate-lisp-indent-last-sexp)
-        ;; indent-point immediately follows open paren.
-        ;; Don't call hook.
+            ;; indent-point immediately follows open paren.
+            ;; Don't call hook.
             (setq desired-indent (current-column))
-            ;; Find the start of first element of containing sexp.
+          ;; Find the start of first element of containing sexp.
           (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t)
           (cond ((looking-at "\\s(")
-          ;; First element of containing sexp is a list.
-          ;; Indent under that list.
+                 ;; First element of containing sexp is a list.
+                 ;; Indent under that list.
                  )
                 ((> (save-excursion
                       (forward-line 1)
                       (point))
                     calculate-lisp-indent-last-sexp)
-                    ;; This is the first line to start within the containing sexp.
-                    ;; It's almost certainly a function call.
+                 ;; This is the first line to start within the containing sexp.
+                 ;; It's almost certainly a function call.
                  (if (or
-                 ;; Containing sexp has nothing before this line
-                 ;; except the first element. Indent under that element.
+                      ;; Containing sexp has nothing before this line
+                      ;; except the first element. Indent under that element.
                       (= (point) calculate-lisp-indent-last-sexp)
 
-;; First sexp after `containing-sexp' is a keyword. This
-;; condition is more debatable. It's so that I can have
-;; unquoted plists in macros. It assumes that you won't
-;; make a function whose name is a keyword.
+                      ;; First sexp after `containing-sexp' is a keyword. This
+                      ;; condition is more debatable. It's so that I can have
+                      ;; unquoted plists in macros. It assumes that you won't
+                      ;; make a function whose name is a keyword.
                       (when-let (char-after (char-after (1+ containing-sexp)))
                         (char-equal char-after ?:))
 
-;; Check for quotes or backquotes around.
+                      ;; Check for quotes or backquotes around.
                       (let* ((positions (elt state 9))
                              (last (car (last positions)))
                              (rest (reverse (butlast positions)))
@@ -974,55 +980,55 @@ the current defun."
                                       (looking-at-p
                                        "\\(?:back\\)?quote[\t\n\f\s]+(")))))
                            any-quoted-p))))
-                           ;; Containing sexp has nothing before this line
-                           ;; except the first element.  Indent under that element.
+                     ;; Containing sexp has nothing before this line
+                     ;; except the first element.  Indent under that element.
                      nil
-                     ;; Skip the first element, find start of second (the first
-                     ;; argument of the function call) and indent under.
+                   ;; Skip the first element, find start of second (the first
+                   ;; argument of the function call) and indent under.
                    (progn (forward-sexp 1)
                           (parse-partial-sexp (point)
                                               calculate-lisp-indent-last-sexp
                                               0 t)))
                  (backward-prefix-chars))
                 (t
-                ;; Indent beneath first sexp on same line as
-                ;; `calculate-lisp-indent-last-sexp'.  Again, it's
-                ;; almost certainly a function call.
+                 ;; Indent beneath first sexp on same line as
+                 ;; `calculate-lisp-indent-last-sexp'.  Again, it's
+                 ;; almost certainly a function call.
                  (goto-char calculate-lisp-indent-last-sexp)
                  (beginning-of-line)
                  (parse-partial-sexp (point) calculate-lisp-indent-last-sexp
                                      0 t)
                  (backward-prefix-chars)))))
-                 ;; Point is at the point to indent under unless we are inside a string.
-                 ;; Call indentation hook except when overridden by lisp-indent-offset
-                 ;; or if the desired indentation has already been computed.
+      ;; Point is at the point to indent under unless we are inside a string.
+      ;; Call indentation hook except when overridden by lisp-indent-offset
+      ;; or if the desired indentation has already been computed.
       (let ((normal-indent (current-column)))
         (cond ((elt state 3)
-        ;; Inside a string, don't change indentation.
+               ;; Inside a string, don't change indentation.
                nil)
               ((and (integerp lisp-indent-offset) containing-sexp)
-              ;; Indent by constant offset
+               ;; Indent by constant offset
                (goto-char containing-sexp)
                (+ (current-column) lisp-indent-offset))
-               ;; in this case calculate-lisp-indent-last-sexp is not nil
+              ;; in this case calculate-lisp-indent-last-sexp is not nil
               (calculate-lisp-indent-last-sexp
                (or
-               ;; try to align the parameters of a known function
+                ;; try to align the parameters of a known function
                 (and lisp-indent-function
                      (not retry)
                      (funcall lisp-indent-function indent-point state))
-                     ;; If the function has no special alignment
-                     ;; or it does not apply to this argument,
-                     ;; try to align a constant-symbol under the last
-                     ;; preceding constant symbol, if there is such one of
-                     ;; the last 2 preceding symbols, in the previous
-                     ;; uncommented line.
+                ;; If the function has no special alignment
+                ;; or it does not apply to this argument,
+                ;; try to align a constant-symbol under the last
+                ;; preceding constant symbol, if there is such one of
+                ;; the last 2 preceding symbols, in the previous
+                ;; uncommented line.
                 (and (save-excursion
                        (goto-char indent-point)
                        (skip-chars-forward " \t")
                        (looking-at ":"))
-                       ;; The last sexp may not be at the indentation
-                       ;; where it begins, so find that one, instead.
+                     ;; The last sexp may not be at the indentation
+                     ;; where it begins, so find that one, instead.
                      (save-excursion
                        (goto-char calculate-lisp-indent-last-sexp)
                        ;; Handle prefix characters and whitespace
@@ -1055,20 +1061,18 @@ the current defun."
                                 (looking-at ":")
                                 (setq indent (current-column))))
                        indent))
-                       ;; another symbols or constants not preceded by a constant
-                       ;; as defined above.
+                ;; another symbols or constants not preceded by a constant
+                ;; as defined above.
                 normal-indent))
-                ;; in this case calculate-lisp-indent-last-sexp is nil
+              ;; in this case calculate-lisp-indent-last-sexp is nil
               (desired-indent)
               (t
                normal-indent))))))
-
 
 (defun prettier-elisp-indent-buffer ()
   "Indent whole buffer."
   (indent-region (point-min)
                  (point-max)))
-
 
 (defun prettier-elisp-remove-whitespace-end-of-line ()
   "Remove trailing whitespace from lines."
@@ -1092,12 +1096,19 @@ the current defun."
   "Format STR and return result."
   (with-temp-buffer
     (insert str)
-    (let ((emacs-lisp-mode-hook nil))
+    (let ((emacs-lisp-mode-hook nil)
+          (indent-tabs-mode nil)
+          (inhibit-message t))
       (emacs-lisp-mode)
+      (run-hooks 'prettier-elisp-pre-format-hooks)
       (dolist (fn '(prettier-elisp-format-all-forms
                     prettier-elisp--ensure-top-level-newlines))
         (funcall fn))
-      (concat (string-trim (buffer-string)) "\n"))))
+      (run-hooks 'prettier-elisp-buffer-post-format-hooks)
+      (concat (string-trim
+               (buffer-substring-no-properties (point-min)
+                                               (point-max)))
+              "\n"))))
 
 ;;;###autoload
 (defun prettier-elisp-to-string (sexp)
@@ -1111,15 +1122,17 @@ the current defun."
   (run-hooks 'prettier-elisp-pre-format-hooks)
   (prettier-elisp-current-defun))
 
+(defun prettier-elisp--buffer ()
+  "Format the current buffer's Lisp code."
+  (let ((str (prettier-elisp-string (buffer-string))))
+    (prettier-elisp-apply-patch (point-min)
+                                (point-max) str)))
+
 ;;;###autoload
 (defun prettier-elisp-buffer ()
   "Format all buffer."
   (interactive)
-  (run-hooks 'prettier-elisp-pre-format-hooks)
-  (dolist (fn '(prettier-elisp--ensure-top-level-newlines
-                prettier-elisp-format-all-forms))
-    (funcall fn))
-  (run-hooks 'prettier-elisp-buffer-post-format-hooks))
+  (prettier-elisp--buffer))
 
 ;;;###autoload
 (define-minor-mode prettier-elisp-buffer-mode
