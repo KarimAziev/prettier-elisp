@@ -112,8 +112,7 @@ POS defaults to `point'."
      (erase-buffer)
      (progn
        (let ((emacs-lisp-mode-hook nil)
-             (indent-tabs-mode nil)
-             (parse-sexp-ignore-comments t))
+             (indent-tabs-mode nil))
         (emacs-lisp-mode)
         (insert ,str)
         ,@body))))
@@ -618,68 +617,69 @@ With ARG, do it that many times."
   (prettier-elisp-with-temp-buffer
     body
     (goto-char (point-min))
-    (prettier-elisp-indent-inner)
-    (save-excursion
+    (let ((parse-sexp-ignore-comments t))
+      (prettier-elisp-indent-inner)
+      (save-excursion
+        (save-match-data
+          (while
+              (prettier-elisp-re-search-forward "[(`']\\([\n\t\r\s\f]+\\)"
+                                                nil t 1)
+            (let ((beg (match-beginning 0)))
+              (delete-region (1+ beg)
+                             (point))))))
       (save-match-data
-        (while
-            (prettier-elisp-re-search-forward "[(`']\\([\n\t\r\s\f]+\\)"
-                                              nil t 1)
-          (let ((beg (match-beginning 0)))
-            (delete-region (1+ beg)
-                           (point))))))
-    (save-match-data
-      (prettier-elisp--fix-lonely-parens))
-    (save-excursion
-      (save-match-data
-        (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
-          (let ((beg (match-beginning 0)))
-            (delete-region beg (point))))))
-    (save-excursion
-      (save-match-data
-        (while (prettier-elisp-re-search-forward "\\()\\)[a-z0-9.]" nil t 1)
-          (replace-match ") " nil nil nil 1))))
-    (save-excursion
-      (save-match-data
-        (while
-            (prettier-elisp-re-search-forward
-             "(\\([\n\t\s]+\\)[a-z0-9:.+$!-]" nil t 1)
-          (replace-match "" nil nil nil 1))))
-    (save-excursion
-      (save-match-data
-        (while
-            (prettier-elisp-re-search-forward
-             "[a-zZ0-9:.+$!-]\\([\n\t\s]+\\))" nil t 1)
-          (when-let ((end (1- (point)))
-                     (start
-                      (save-excursion
-                        (forward-char -1)
-                        (skip-chars-backward "\s\t\n")
-                        (unless (nth 4
-                                     (syntax-ppss (point)))
-                          (point)))))
-            (delete-region start end)))))
-    (save-excursion
-      (save-match-data
-        (while
-            (prettier-elisp-re-search-forward
-             "[a-z0-9:.+$!-]\\((\\)" nil t 1)
-          (replace-match "\s(" nil nil nil 1))))
-    (save-excursion
-      (save-match-data
-        (while
-            (prettier-elisp-re-search-forward
-             ")\\([\s\t]+\\)[)]" nil t 1)
-          (replace-match "" nil nil nil 1))))
-    (save-excursion
-      (save-match-data
-        (while (prettier-elisp-re-search-forward "\\([\s\t]+\\)[\n\r\f]"
-                                                 nil t 1)
-          (replace-match "" nil nil nil 1))))
-    (save-excursion
-      (goto-char (point-max))
-      (save-match-data
-        (prettier-elisp-all-conses)))
-    (string-trim (buffer-string))))
+        (prettier-elisp--fix-lonely-parens))
+      (save-excursion
+        (save-match-data
+          (while (prettier-elisp-re-search-forward "^\\s-*[\n]+" nil t 1)
+            (let ((beg (match-beginning 0)))
+              (delete-region beg (point))))))
+      (save-excursion
+        (save-match-data
+          (while (prettier-elisp-re-search-forward "\\()\\)[a-z0-9.]" nil t 1)
+            (replace-match ") " nil nil nil 1))))
+      (save-excursion
+        (save-match-data
+          (while
+              (prettier-elisp-re-search-forward
+               "(\\([\n\t\s]+\\)[a-z0-9:.+$!-]" nil t 1)
+            (replace-match "" nil nil nil 1))))
+      (save-excursion
+        (save-match-data
+          (while
+              (prettier-elisp-re-search-forward
+               "[a-zZ0-9:.+$!-]\\([\n\t\s]+\\))" nil t 1)
+            (when-let ((end (1- (point)))
+                       (start
+                        (save-excursion
+                          (forward-char -1)
+                          (skip-chars-backward "\s\t\n")
+                          (unless (nth 4
+                                       (syntax-ppss (point)))
+                            (point)))))
+              (delete-region start end)))))
+      (save-excursion
+        (save-match-data
+          (while
+              (prettier-elisp-re-search-forward
+               "[a-z0-9:.+$!-]\\((\\)" nil t 1)
+            (replace-match "\s(" nil nil nil 1))))
+      (save-excursion
+        (save-match-data
+          (while
+              (prettier-elisp-re-search-forward
+               ")\\([\s\t]+\\)[)]" nil t 1)
+            (replace-match "" nil nil nil 1))))
+      (save-excursion
+        (save-match-data
+          (while (prettier-elisp-re-search-forward "\\([\s\t]+\\)[\n\r\f]"
+                                                   nil t 1)
+            (replace-match "" nil nil nil 1))))
+      (save-excursion
+        (goto-char (point-max))
+        (save-match-data
+          (prettier-elisp-all-conses)))
+      (string-trim (buffer-string)))))
 
 (defun prettier-elisp--goto-line (line)
   "Move cursor to line LINE."
