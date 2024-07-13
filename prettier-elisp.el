@@ -755,16 +755,23 @@ END."
 
 (defun prettier-elisp-current-defun ()
   "Format the current Emacs Lisp function definition."
-  (when-let* ((buff (current-buffer))
-              (pos (point))
-              (beg
-               (let ((pps (syntax-ppss)))
-                 (when (> (car pps) 0)
-                   (car (nth 9 pps)))))
-              (end
-               (save-excursion
-                 (goto-char beg)
-                 (prettier-elisp-move-with 'forward-sexp 1))))
+  (let ((pos (point))
+        (beg
+         (let ((pps (syntax-ppss)))
+           (when (> (car pps) 0)
+             (car (nth 9 pps)))))
+        (end)
+        (whitespace-beg))
+    (when beg
+      (setq end
+            (save-excursion
+              (goto-char beg)
+              (prettier-elisp-move-with 'forward-sexp 1)))
+      (setq whitespace-beg
+            (save-excursion
+              (goto-char beg)
+              (unless (zerop (skip-chars-backward "\s\t"))
+                (point)))))
     (when (and beg end)
       (let ((left-body (buffer-substring-no-properties beg pos))
             (right-body (buffer-substring-no-properties pos end))
@@ -774,12 +781,18 @@ END."
         (setq replacement (prettier-elisp-format body))
         (unless (or (not body)
                     (not replacement)
-                    (string= body replacement)
+                    (and (not whitespace-beg)
+                         (string= body replacement))
                     (not
                      (prettier-elisp-compare-strings-ignore-whitespace
                       body
                       replacement)))
-          (prettier-elisp-apply-patch beg end replacement))))))
+          (prettier-elisp-apply-patch
+           (save-excursion
+             (goto-char beg)
+             (when (skip-chars-backward "\s\t")
+               (point)))
+           end replacement))))))
 
 (defun prettier-elisp-get-line-rules (sexp)
   "Return amount of lines before SEXP."

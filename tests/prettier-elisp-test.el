@@ -139,6 +139,35 @@ case string before formatting."
        "(let((targs (append (list (km-time-to-tomorrow-encoded time) nil fn) args))) (apply'run-at-time targs))")
       "(let ((targs (append (list (km-time-to-tomorrow-encoded time) nil fn) args)))\n  (apply'run-at-time targs))\n"))))
 
+
+(ert-deftest prettier-elisp-test--initial-indent ()
+  (let ((fill-column 80))
+    (should
+     (equal
+      (prettier-elisp-string
+       "     (defun km-today () (decode-time (current-time)))")
+      "(defun km-today ()\n  (decode-time (current-time)))\n"))
+    (should
+     (equal
+      (prettier-elisp-string
+       "\t\s\t(defun km-tomorrow () (decode-time (time-add 86400 (current-time))))")
+      "(defun km-tomorrow ()\n  (decode-time (time-add 86400 (current-time))))\n"))
+    (should
+     (equal
+      (prettier-elisp-string
+       "\t(defun km-shift-to-tomorrow (time-date) (let ((td time-date)) (setf (nthcdr 3 td) nil) (append td (km-date-part (km-tomorrow)))))")
+      "(defun km-shift-to-tomorrow (time-date)\n  (let ((td time-date))\n    (setf (nthcdr 3 td) nil)\n    (append td (km-date-part (km-tomorrow)))))\n"))
+    (should
+     (equal
+      (prettier-elisp-string
+       " (defun km-shift-to-tomorrow-maybe (time-date) (let ((td (encode-time time-date))) (if (time-less-p td nil) (km-shift-to-tomorrow time-date) time-date)))")
+      "(defun km-shift-to-tomorrow-maybe (time-date)\n  (let ((td (encode-time time-date)))\n    (if (time-less-p td nil)\n        (km-shift-to-tomorrow time-date) time-date)))\n"))
+    (should
+     (equal
+      (prettier-elisp-string
+       " (let((targs (append (list (km-time-to-tomorrow-encoded time) nil fn) args))) (apply'run-at-time targs))")
+      "(let ((targs (append (list (km-time-to-tomorrow-encoded time) nil fn) args)))\n  (apply'run-at-time targs))\n"))))
+
 (ert-deftest prettier-elisp-test-string-test-with-comments ()
   (let ((fill-column 80))
     (should
