@@ -237,14 +237,14 @@ as for `re-search-backward'."
   "Move by calling FN N times.
 Return new position if changed, nil otherwise."
   (unless n (setq n 1))
-  (when-let ((str-start (nth 8 (syntax-ppss (point)))))
+  (when-let* ((str-start (nth 8 (syntax-ppss (point)))))
     (goto-char str-start))
   (let ((init-pos (point))
         (pos)
         (count (if (> n 0) n (- n))))
     (while
         (and (not (= count 0))
-             (when-let ((end (ignore-errors
+             (when-let* ((end (ignore-errors
                                (funcall fn (if
                                                (> n 0) 1
                                              -1))
@@ -374,7 +374,7 @@ With ARG, do it that many times."
                (> (+ len col)
                   fill-column))
       (prettier-elisp-delete-multi-whitespace-forward)
-      (if-let ((l (prettier-elisp-get-list-at-point)))
+      (if-let* ((l (prettier-elisp-get-list-at-point)))
           (cond ((and
                   (or (symbolp (car-safe l))
                       (stringp (car-safe l)))
@@ -482,7 +482,7 @@ With ARG, do it that many times."
       (prettier-elisp-backward-sexp 1)
       (prettier-elisp-new-line-and-indent)
       (prettier-elisp-forward-sexp 1))
-    (when-let ((symb
+    (when-let* ((symb
                 (symbol-at-point)))
       (pcase symb
         ((or 'save-excursion
@@ -557,7 +557,7 @@ With ARG, do it that many times."
 
 (defun prettier-elisp-indent-inner ()
   "Indent nested list at point."
-  (when-let ((l (or (prettier-elisp-get-list-at-point))))
+  (when-let* ((l (or (prettier-elisp-get-list-at-point))))
     (save-excursion
       (forward-char 1)
       (prettier-elisp-ensure-list-lines)
@@ -649,7 +649,7 @@ With ARG, do it that many times."
           (while
               (prettier-elisp-re-search-forward
                "[a-zZ0-9:.+$!-]\\([\n\t\s]+\\))" nil t 1)
-            (when-let ((end (1- (point)))
+            (when-let* ((end (1- (point)))
                        (start
                         (save-excursion
                           (forward-char -1)
@@ -835,14 +835,14 @@ Argument STRING2 is the second string to compare."
     (let ((pos)
           (sexp-count))
       (while
-          (when-let ((new-pos (ignore-errors
+          (when-let* ((new-pos (ignore-errors
                                 (let ((parse-sexp-ignore-comments
                                        t))
                                   (backward-list)))))
             (when (or (not pos)
                       (not (= new-pos pos)))
               (setq pos new-pos)))
-        (when-let ((sexp (prettier-elisp-get-list-at-point)))
+        (when-let* ((sexp (prettier-elisp-get-list-at-point)))
           (unless sexp-count
             (save-excursion
               (forward-sexp 1)
@@ -850,7 +850,7 @@ Argument STRING2 is the second string to compare."
               (newline 1)))
           (setq sexp-count (1+ (or sexp-count 0)))
           (let ((prev-sexp
-                 (when-let ((new-pos
+                 (when-let* ((new-pos
                              (ignore-errors
                                (let ((parse-sexp-ignore-comments
                                       t))
@@ -883,7 +883,7 @@ Argument STRING2 is the second string to compare."
     (goto-char (point-max))
     (let ((pos))
       (while
-          (when-let ((new-pos (ignore-errors
+          (when-let* ((new-pos (ignore-errors
                                 (let ((parse-sexp-ignore-comments
                                        t))
                                   (backward-list)))))
@@ -985,7 +985,7 @@ the current defun."
                       ;; condition is more debatable. It's so that I can have
                       ;; unquoted plists in macros. It assumes that you won't
                       ;; make a function whose name is a keyword.
-                      (when-let (char-after (char-after (1+ containing-sexp)))
+                      (when-let* (char-after (char-after (1+ containing-sexp)))
                         (char-equal char-after ?:))
 
                       ;; Check for quotes or backquotes around.
@@ -995,7 +995,7 @@ the current defun."
                              (any-quoted-p nil)
                              (point nil))
                         (or
-                         (when-let (char (char-before last))
+                         (when-let* (char (char-before last))
                            (or (char-equal char ?')
                                (char-equal char ?`)))
                          (progn
@@ -1003,7 +1003,7 @@ the current defun."
                              (setq point (pop rest))
                              (setq any-quoted-p
                                    (or
-                                    (when-let (char (char-before point))
+                                    (when-let* (char (char-before point))
                                       (or (char-equal char ?')
                                           (char-equal char ?`)))
                                     (save-excursion
