@@ -985,8 +985,8 @@ the current defun."
                       ;; condition is more debatable. It's so that I can have
                       ;; unquoted plists in macros. It assumes that you won't
                       ;; make a function whose name is a keyword.
-                      (when-let* (char-after (char-after (1+ containing-sexp)))
-                        (char-equal char-after ?:))
+                      (when-let* ((next-char (char-after (1+ containing-sexp))))
+                        (char-equal next-char ?:))
 
                       ;; Check for quotes or backquotes around.
                       (let* ((positions (elt state 9))
@@ -995,7 +995,7 @@ the current defun."
                              (any-quoted-p nil)
                              (point nil))
                         (or
-                         (when-let* (char (char-before last))
+                         (when-let* ((char (char-before last)))
                            (or (char-equal char ?')
                                (char-equal char ?`)))
                          (progn
@@ -1003,7 +1003,7 @@ the current defun."
                              (setq point (pop rest))
                              (setq any-quoted-p
                                    (or
-                                    (when-let* (char (char-before point))
+                                    (when-let* ((char (char-before point)))
                                       (or (char-equal char ?')
                                           (char-equal char ?`)))
                                     (save-excursion
